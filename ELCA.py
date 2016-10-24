@@ -303,18 +303,12 @@ if __name__ == "__main__":
 
     t = np.linspace(0.85,1.05,200)
 
-    init = { 'rp':0.06,
-             'ar':14.07,
-             'per':3.336817,
-             'inc':88.75,
-             'u1': 0.3,
-             'u2': 0,
-             'ecc':0,
-             'ome':0,
-             'a0':1,
-             'a1':0,
-             'a2':0,
-             'tm':0.95 }
+    init = { 'rp':0.06, 'ar':14.07,       # Rp/Rs, a/Rs
+             'per':3.336817, 'inc':88.75, # Period (days), Inclination
+             'u1': 0.3, 'u2': 0,          # limb darkening (linear, quadratic)
+             'ecc':0, 'ome':0,            # Eccentricity, Arg of periastron
+             'a0':1, 'a1':0,              # Airmass extinction terms
+             'a2':0, 'tm':0.95 }          # tm = Mid Transit time (Days)
 
     # only report params with bounds, all others will be fixed to initial value
     mybounds = {

@@ -14,7 +14,7 @@ from scipy.optimize import minimize, least_squares, curve_fit
 array_1d_double = np.ctypeslib.ndpointer(dtype=ctypes.c_double,ndim=1,flags=['C_CONTIGUOUS','aligned'])
 
 # load library
-lib_trans = np.ctypeslib.load_library('lib_transit.so',environ['UTILPATH'])
+lib_trans = np.ctypeslib.load_library('lib_transit.so',environ['LD_LIBRARY_PATH'])
 
 # load fn from library and define inputs
 occultquadC = lib_trans.occultquad

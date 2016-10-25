@@ -12,7 +12,7 @@ Functionality:
 
 
 ## Running the package
-```
+```python
 from ELCA import lc_fitter, transit 
 import numpy as np
 
@@ -55,6 +55,7 @@ if __name__ == "__main__":
 
 ## Set up and install from scratch
 
+Clone the git repo
 ```
 cd $HOME
 git clone https://github.com/pearsonkyle/Exoplanet-Light-Curve-Analysis.git
@@ -79,7 +80,6 @@ gedit .bashrc
 export PYTHONPATH=$HOME/ELCA:$PYTHONPATH
 export LD_LIBRARY_PATH=$HOME/ELCA/util_lib:$LD_LIBRARY_PATH
 ```
-
 Update your .bashrc file after adding those two lines
 ```
 source .bashrc

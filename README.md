@@ -2,7 +2,6 @@
 
 A python package for modeling exoplanet light curves. The transit function is based on the analytic expressions of Mandel and Agol 2002 and is re-written in C for microsecond execution speeds.
 
-Functionality:
 - Simple transit generator
 - Easily create noisy datasets
 - Parameter optimization with a simple uncertainty derivation powered by Scipy 

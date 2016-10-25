@@ -14,7 +14,7 @@ from scipy.optimize import minimize, least_squares, curve_fit
 array_1d_double = np.ctypeslib.ndpointer(dtype=ctypes.c_double,ndim=1,flags=['C_CONTIGUOUS','aligned'])
 
 # load library
-lib_trans = np.ctypeslib.load_library('lib_transit.so',environ['LD_LIBRARY_PATH'])
+lib_trans = np.ctypeslib.load_library('lib_transit.so',environ['ELCA_PATH'])
 
 # load fn from library and define inputs
 occultquadC = lib_trans.occultquad
@@ -25,7 +25,7 @@ occultquadC.argtypes = [array_1d_double, ctypes.c_double, ctypes.c_double, \
                         ctypes.c_double, ctypes.c_double, ctypes.c_double, \
                         ctypes.c_double, ctypes.c_double, array_1d_double ]
 
-# outputs
+# no outputs, last *double input is saved over in C
 occultquadC.restype = None
 ########################################################
 
@@ -45,6 +45,9 @@ def transit(**kwargs):
             airmass - values for exponential airmass function (if neccessary)
 
         EXAMPLE:
+            from ELCA import transit
+            import numpy as np
+            
             t = np.linspace(0.85,1.05,200)
 
             init = { 'rp':0.06, 'ar':14.07, 'per':3.336817,

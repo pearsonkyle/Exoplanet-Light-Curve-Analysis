@@ -270,7 +270,7 @@ class lc_fitter(object):
 
         # residual histogram
         # bins up to 3 std of Residuals
-        maxbs = np.round(3*np.std(myfit.data['LS']['residuals'])*1e6,-2)
+        maxbs = np.round(3*np.std(self.data['LS']['residuals'])*1e6,-2)
         bins = np.linspace(-maxbs,maxbs,7)
         inset_axes.hist( self.data[t]['residuals']*1e6,bins=bins, orientation="horizontal",color="black" )
         inset_axes.get_xaxis().set_visible(False)

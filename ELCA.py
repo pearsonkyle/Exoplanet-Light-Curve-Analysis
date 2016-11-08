@@ -89,11 +89,11 @@ def transit(**kwargs):
     a1 = vd.get('a1',0)
     a2 = vd.get('a2',0)
 
-    # polynomial funcion
-    if kwargs.get('airmass',0) == 0:
-        model *= (a0 + time*a1 + time*time*a2)
-    else: # exponential airmass function
+ 
+    if isinstance(kwargs.get('airmass',0),np.ndarray): # exponential airmass function
         model *= (a0 * np.exp(kwargs['airmass']*a1))
+    else:     # polynomial funcion
+        model *= (a0 + time*a1 + time*time*a2)
 
     return model
 
@@ -135,10 +135,9 @@ class lc_fitter(object):
 
         # add airmass and exponential function if available
         if airmass != False:
-            # TODO test this
-            self.airmass = np.array(self.airmass)
+            self.airmass = np.array(airmass)
         else:
-            self.airmass = 0
+            self.airmass = False
 
         if type(dataerr) == type(None):
             self.yerr = np.ones(len(t))
@@ -168,7 +167,7 @@ class lc_fitter(object):
 
         # assemble function input for transit()
         kargs = {'freekeys':freekeys, 'values':fixeddict}
-        if self.airmass != 0: kargs['airmass'] = self.airmass
+        if isinstance(self.airmass,np.ndarray): kargs['airmass'] = self.airmass
 
         def fcn2min(params,**kwargs):
             # define objective function: returns the array to be minimized
@@ -216,13 +215,15 @@ class lc_fitter(object):
         for k in amkeys:
             vals[k] = fixeddict[k]
 
-        if self.airmass != 0:
+        if isinstance(self.airmass,np.ndarray):
             self.data['LS']['airmass'] = transit(time=self.t,values=vals,airmass=self.airmass)
         else:
             self.data['LS']['airmass'] = transit(time=self.t,values=vals)
 
         # COMPUTE PHASE
         self.data['LS']['phase'] = (self.t - self.data['LS']['parameters']['tm']) / self.data['LS']['parameters']['per']
+
+        # TODO COMPUTE CHI2
 
 
     def plot_results(self, detrend=False, phase=False, t='LS',show=False,title='Lightcurve Fit',save=False,output='png'):

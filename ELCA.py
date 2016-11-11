@@ -47,7 +47,7 @@ def transit(**kwargs):
         EXAMPLE:
             from ELCA import transit
             import numpy as np
-            
+
             t = np.linspace(0.85,1.05,200)
 
             init = { 'rp':0.06, 'ar':14.07, 'per':3.336817,
@@ -89,7 +89,7 @@ def transit(**kwargs):
     a1 = vd.get('a1',0)
     a2 = vd.get('a2',0)
 
- 
+
     if isinstance(kwargs.get('airmass',0),np.ndarray): # exponential airmass function
         model *= (a0 * np.exp(kwargs['airmass']*a1))
     else:     # polynomial funcion
@@ -134,7 +134,7 @@ class lc_fitter(object):
         self.bounds = bounds
 
         # add airmass and exponential function if available
-        if airmass != False:
+        if isinstance(airmass,list) or isinstance(airmass,np.ndarray):
             self.airmass = np.array(airmass)
         else:
             self.airmass = False

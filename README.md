@@ -1,6 +1,6 @@
-# Exoplanet Light Curve Analysis
+# Exoplanet Light Curve Analysis with Nested Sampler
 
-A python package for modeling exoplanet light curves. The transit function is based on the analytic expressions of Mandel and Agol 2002 and is re-written in C for microsecond execution speeds.
+A python package for modeling exoplanet light curves. The transit function is based on the analytic expressions of Mandel and Agol 2002 and is re-written in C for microsecond execution speeds. This branch uses the mutlimodal nested sampling algorithm (https://arxiv.org/abs/0809.3437) to find a global solution. 
 
 Check out the "nested" branch for a global solver using the Multinest library for nested sampling. 
 
@@ -52,6 +52,11 @@ if __name__ == "__main__":
     # explore the output of the fitting
     print( myfit.data['LS'].keys() )
 ```
+
+
+## Setting up the Nested Sampling Library
+
+COMING SOON...
 
 
 ## Set up and install from scratch

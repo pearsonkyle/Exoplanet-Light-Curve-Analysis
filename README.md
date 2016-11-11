@@ -1,6 +1,6 @@
 # Exoplanet Light Curve Analysis with Nested Sampler
 
-A python package for modeling exoplanet light curves. The transit function is based on the analytic expressions of Mandel and Agol 2002 and is re-written in C for microsecond execution speeds. This branch uses the mutlimodal nested sampling algorithm (https://arxiv.org/abs/0809.3437) 
+A python package for modeling exoplanet light curves. The transit function is based on the analytic expressions of Mandel and Agol 2002 and is re-written in C for microsecond execution speeds. This branch uses the mutlimodal nested sampling algorithm (https://arxiv.org/abs/0809.3437) to find a global solution. 
 
 - Simple transit generator
 - Easily create noisy datasets

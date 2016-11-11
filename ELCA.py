@@ -7,6 +7,13 @@ from mpl_toolkits.axes_grid.inset_locator import inset_axes
 from scipy.optimize import minimize, least_squares, curve_fit
 
 
+# make sure you compile the C library and add it to LD_LIBRARY_PATH
+# then install the pymultinest package
+# follow instructions on the github page to do so
+import pymultinest
+# TODO add libmultinest.so to ELCA_PATH
+# add bashrc export path
+
 ########################################################
 # LOAD IN TRANSIT FUNCTION FROM C
 
@@ -89,8 +96,8 @@ def transit(**kwargs):
     a1 = vd.get('a1',0)
     a2 = vd.get('a2',0)
 
-
-    if isinstance(kwargs.get('airmass',0),np.ndarray): # exponential airmass function
+    # exponential airmass function (change to accept list as well?)
+    if isinstance(kwargs.get('airmass',0),np.ndarray):
         model *= (a0 * np.exp(kwargs['airmass']*a1))
     else:     # polynomial funcion
         model *= (a0 + time*a1 + time*time*a2)
@@ -125,7 +132,7 @@ class param:
 
 
 class lc_fitter(object):
-    def __init__(self,t,data,dataerr=None,init=None,bounds=None,airmass=False,ls=True,nested=False,plot=False):
+    def __init__(self,t,data,dataerr=None,init=None,bounds=None,airmass=False,nested=False,plot=False):
 
         self.t = np.array(t)
         self.y = np.array(data)
@@ -146,11 +153,11 @@ class lc_fitter(object):
 
         self.data = { 'LS':{},'NS':{} }
 
-        if ls == True: self.fit_lm()
-
+        self.fit_ls()
+        if nested: self.fit_ns()
         # Nested sampling coming soon
 
-    def fit_lm(self):
+    def fit_ls(self):
         # prep data for **kwargs
         fixeddict = {};
         freekeys = [];

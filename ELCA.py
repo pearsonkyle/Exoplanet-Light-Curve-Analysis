@@ -1,17 +1,20 @@
 import ctypes
 import numpy as np
-from os import environ
+from itertools import chain
 from colorsys import hls_to_rgb
 import matplotlib.pyplot as plt
+from os import environ, path, mkdir
 from mpl_toolkits.axes_grid.inset_locator import inset_axes
 from scipy.optimize import minimize, least_squares, curve_fit
 
+# set up directory for nested sampler results
+if not path.exists("chains"): mkdir("chains")
 
 # make sure you compile the C library and add it to LD_LIBRARY_PATH
 # then install the pymultinest package
 # follow instructions on the github page to do so
 import pymultinest
-# TODO add libmultinest.so to ELCA_PATH
+# TODO add libmultinest.so to LD_LIBRARY_PATH
 # add bashrc export path
 
 ########################################################
@@ -37,7 +40,7 @@ occultquadC.restype = None
 ########################################################
 
 
-
+# also take *args for multinest?
 def transit(**kwargs):
     '''
         Analytic expression for a transiting extrasolar planet.
@@ -71,14 +74,22 @@ def transit(**kwargs):
     '''
     time = np.require(kwargs['time'],dtype=ctypes.c_double,requirements='C')
     vd = kwargs['values']
+
     keys = ['rp','ar','per','inc','u1','u2','ecc','ome','tm']
 
-    # add free vals to vals
-    if len( kwargs.get('freevals',[]) )  == len( kwargs.get('freekeys',[1]) ):
-        for i in range(len(kwargs['freevals'])):
-            vd[ kwargs['freekeys'][i] ] = kwargs['freevals'][i]
-    else:
-        pass
+
+    #  removed due to error with len(params from NS,since c_double)
+    #if len( kwargs.get('freevals',[]) )  == len( kwargs.get('freekeys',[1]) ):
+    try:
+        # add free vals to vals
+        if 'freekeys' in kwargs.keys():
+            for i in range(len(kwargs['freekeys'])):
+                vd[ kwargs['freekeys'][i] ] = kwargs['freevals'][i]
+        else:
+            pass
+    except:
+        print('freekeys and freevals not the same length, check kwargs.keys()')
+        import pdb; pdb.set_trace()
 
 
     # create list of parameters, order matters
@@ -118,19 +129,6 @@ def _get_colors(num_colors):
 
 
 
-class param:
-    rp = 0
-    ar = 1
-    per = 2
-    inc = 3
-    u1 = 4
-    u2 = 5
-    ecc = 6
-    ome = 7
-    tm = 8
-
-
-
 class lc_fitter(object):
     def __init__(self,t,data,dataerr=None,init=None,bounds=None,airmass=False,nested=False,plot=False):
 
@@ -154,7 +152,10 @@ class lc_fitter(object):
         self.data = { 'LS':{},'NS':{} }
 
         self.fit_ls()
-        if nested: self.fit_ns()
+        if nested:
+            self.live_points = 400
+            self.ee = 0.1 # evidence tolerance
+            self.fit_ns()
         # Nested sampling coming soon
 
     def fit_ls(self):
@@ -165,7 +166,8 @@ class lc_fitter(object):
         # hopefully each iteration of for loop yields the same order (issue fixed in python 3.6)
         initvals = [ self.init[key] for key in self.bounds.keys() ]
         freekeys = tuple([ key for key in self.bounds.keys() ])
-        up,lo = zip(*[ self.bounds[key] for key in self.bounds.keys() ])
+        lo,up = zip(*[ self.bounds[key] for key in self.bounds.keys() ])
+        # TODO double check the order of up and lo to leastsq input
 
         # add fixed values to dictonary for transit function
         for i in self.init.keys():
@@ -185,7 +187,7 @@ class lc_fitter(object):
 
         # params -> list of free parameters
         # kwargs -> keys for params, values of fixed parameters
-        res = least_squares(fcn2min,x0=initvals,kwargs=kargs,bounds=[up,lo],loss='cauchy')  #method='lm' does not support bounds
+        res = least_squares(fcn2min,x0=initvals,kwargs=kargs,bounds=[lo,up],loss='cauchy')  #method='lm' does not support bounds
         # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.least_squares.html
 
         self.data['LS']['res'] = res
@@ -195,7 +197,6 @@ class lc_fitter(object):
         # compute uncertainties from covariance matrix from jacobian squared
         perr = np.sqrt( np.diag( np.linalg.inv( np.dot( res.jac.T, res.jac) ) )) # diag[ (J.T*J)^-1 ]^0.5
         #perr *= (self.data['LS']['residuals']**2).sum()/( len(self.y) - len(freekeys ) ) # scale by variance, variance is very small ~1e-8
-        # TODO check the order of this, same as order of res.x?
 
 
         # add the best fit parameters to the fixed dictionary
@@ -232,6 +233,103 @@ class lc_fitter(object):
 
         # TODO COMPUTE CHI2
 
+    def fit_ns(self):
+        SIGMA_TOL = 100 # boundary for hypercube parameter space
+
+
+        # hopefully each iteration of for loop yields the same order (issue fixed in python 3.6)
+        freekeys = tuple([ key for key in self.bounds.keys() ])
+        lo,up = zip(*[ self.bounds[key] for key in self.bounds.keys() ])
+
+
+        # adjust bounds based on uncertainties of LS
+        paramlims = []
+        for i in range(len(freekeys)):
+            nbound = 2*self.data['LS']['errors'][freekeys[i]]*SIGMA_TOL
+            if nbound < (up[i]-lo[i]):
+                paramlims.append( self.data['LS']['parameters'][freekeys[i]]-0.5*nbound )
+                paramlims.append( self.data['LS']['parameters'][freekeys[i]]+0.5*nbound )
+            else:
+                paramlims.append( lo[i] )
+                paramlims.append( up[i] )
+
+
+        # add fixed values to dictonary for transit function
+        fixeddict = {};
+        for i in self.init.keys():
+            if i in freekeys: pass
+            else: fixeddict[i] = self.init[i]
+
+        # assemble function kwargs for transit()
+        kargs = {'freekeys':freekeys, 'values':fixeddict}
+
+        def myprior_transit(cube, ndim, n_params,paramlimits=paramlims):
+            '''This transforms a unit cube into the dimensions of your prior
+            space to search. Make sure you do this right!'''
+            for i in range(len(freekeys)): # for only the free params
+                cube[i] = (paramlimits[2*i+1] - paramlimits[2*i])*cube[i]+paramlimits[2*i]
+
+
+        def myloglike(cube, ndim, n_params):
+            '''The most important function. What is your likelihood function?
+            I have chosen a simple chi2 gaussian errors likelihood here.'''
+            model = transit(time=self.t,freevals=cube,**kargs)
+            loglike = -np.sum( ((self.y-model)/self.yerr)**2 ) # CHI2
+            return loglike
+
+
+        '''----------------------------------------------------
+        Now we set up the multinest routine
+        ----------------------------------------------------'''
+        # number of dimensions our problem has
+        ndim = len(freekeys)
+        n_params = len(freekeys) #oddly, this needs to be specified
+
+        pymultinest.run(myloglike, myprior_transit, n_params, evidence_tolerance=self.ee,multimodal=False,
+            resume = False, verbose = False, sampling_efficiency = 0.1, n_live_points=self.live_points)
+
+        # lets analyse the results
+        a = pymultinest.Analyzer(n_params = n_params) #retrieves the data that has been written to hard drive
+        s = a.get_stats()
+        values = s['marginals'] # gets the marginalized posterior probability distributions
+        self.data['NS']['global evidence'] = s['global evidence']
+        self.data['NS']['analyzer'] = a
+
+
+        # add the best fit parameters to the fixed dictionary
+        errordict = {}
+        for i in range(ndim):
+            fixeddict[ freekeys[i] ] = values[i]['median']
+            errordict[ freekeys[i] ] = values[i]['sigma']
+
+        # save data
+        self.data['NS']['parameters'] = fixeddict
+        self.data['NS']['errors'] = errordict
+        self.data['NS']['finalmodel'] = transit(time=self.t,values=fixeddict)
+        self.data['NS']['residuals'] = self.y - self.data['NS']['finalmodel']
+
+        # compute transit and airmass model separately
+        keys = ['rp','ar','per','inc','u1','u2','ecc','ome','tm']
+        vals = {};
+        for k in keys:
+            vals[k] = fixeddict[k]
+        self.data['NS']['transit'] = transit(time=self.t,values=vals)
+
+        amkeys = ['a0','a1','a2']
+        vals = {};
+        for k in amkeys:
+            vals[k] = fixeddict[k]
+
+        if isinstance(self.airmass,np.ndarray):
+            self.data['NS']['airmass'] = transit(time=self.t,values=vals,airmass=self.airmass)
+        else:
+            self.data['NS']['airmass'] = transit(time=self.t,values=vals)
+
+        # COMPUTE PHASE
+        self.data['NS']['phase'] = (self.t - self.data['NS']['parameters']['tm']) / self.data['NS']['parameters']['per']
+
+        # TODO add time, BIC, Bayes Evidence, Chi2
+        # TODO add plotting of marginalized posteriors
 
     def plot_results(self, detrend=False, phase=False, t='LS',show=False,title='Lightcurve Fit',save=False,output='png'):
         '''
@@ -298,6 +396,7 @@ class lc_fitter(object):
         else:
             ax_lc.errorbar( x, self.y, yerr=self.yerr, ls='none', marker='o', color='black')
             ax_lc.plot( x, self.data[t]['finalmodel'],'r-', lw=2)
+            # TODO show both fits
 
         ax_lc.set_ylabel('Relative Flux')
         ax_lc.get_xaxis().set_visible(False)
@@ -308,6 +407,17 @@ class lc_fitter(object):
         if save:
             f.savefig(title+'.'+output)
             plt.close(f)
+
+
+    def plot_posteriors(self,diag='hist'):
+        # TEMPORARY
+        import pandas as pd
+        from pandas.tools.plotting import scatter_matrix
+        values = self.data['NS']['analyzer'].get_equal_weighted_posterior()
+        df = pd.DataFrame(values[:,:-1],columns=tuple([ key for key in self.bounds.keys() ]))
+        scatter_matrix(df, alpha=0.2, diagonal=diag)
+        plt.show()
+
 
 
 if __name__ == "__main__":
@@ -338,6 +448,7 @@ if __name__ == "__main__":
                         dataerr=dataerr,
                         init= init,
                         bounds= mybounds,
+                        nested=True
                         )
 
-    myfit.plot_results(show=True,phase=True)
+    myfit.plot_results(show=True,t='NS')

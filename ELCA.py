@@ -7,9 +7,6 @@ from os import environ, path, mkdir
 from mpl_toolkits.axes_grid.inset_locator import inset_axes
 from scipy.optimize import minimize, least_squares, curve_fit
 
-# set up directory for nested sampler results
-if not path.exists("chains"): mkdir("chains")
-
 # make sure you compile the C library and add it to LD_LIBRARY_PATH
 # then install the pymultinest package
 # follow instructions on the github page to do so
@@ -153,6 +150,9 @@ class lc_fitter(object):
 
         self.fit_ls()
         if nested:
+            # set up directory for nested sampler results
+            if not path.exists("chains"): mkdir("chains")
+
             self.live_points = 400
             self.ee = 0.1 # evidence tolerance
             self.fit_ns()
@@ -409,7 +409,7 @@ class lc_fitter(object):
             plt.close(f)
 
 
-    def plot_posteriors(self,diag='hist'):
+    def plot_posteriors(self,diag='kde'):
         # TEMPORARY
         import pandas as pd
         from pandas.tools.plotting import scatter_matrix
@@ -452,3 +452,4 @@ if __name__ == "__main__":
                         )
 
     myfit.plot_results(show=True,t='NS')
+    myfit.plot_posteriors()

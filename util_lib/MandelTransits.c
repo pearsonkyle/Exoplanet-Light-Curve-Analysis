@@ -232,18 +232,6 @@ double kepler_opt(double m, double eplusoverminus, double e)
 	return f;
 }
 
-int printVector2(float *vector, int Npoints)
-{
-	char string[Npoints+1];
-	int i;
-	for (i=0;i<Npoints;i++)
-	{
-		string[i] = (char) vector[i];
-	}
-	printf("%s",string);
-	return 0;
-}
-
 double occultuni(double z, double w)
 {
 	double xt, kar1, kar0, lambdae, dblcond, dblcondA, dblcondB, muo1;
@@ -314,7 +302,7 @@ void occultquad(double *t, double p, double ar, double P, double i, double gamma
 
 
 	// phase
-    for (ii=0; ii<Npoints; ii++) { phi[ii] = (t[ii]-tmid)*invP; }
+    for (ii=0; ii<Npoints; ii++) { phi[ii] = fmod( (t[ii]-tmid)*invP, 1.); }
     // TODO test if tmid is the y-int of the transit cycle-time plot does phi still hold?
 
 

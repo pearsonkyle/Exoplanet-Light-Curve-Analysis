@@ -127,13 +127,15 @@ def _get_colors(num_colors):
 
 
 class lc_fitter(object):
-    def __init__(self,t,data,dataerr=None,init=None,bounds=None,airmass=False,nested=False,plot=False):
+    def __init__(self,t,data,dataerr=None,init=None,bounds=None,airmass=False,nested=False,plot=False,loss='cauchy'):
 
         self.t = np.array(t)
         self.y = np.array(data)
 
         self.init = init
         self.bounds = bounds
+
+        self.loss = loss
 
         # add airmass and exponential function if available
         if isinstance(airmass,list) or isinstance(airmass,np.ndarray):
@@ -187,7 +189,7 @@ class lc_fitter(object):
 
         # params -> list of free parameters
         # kwargs -> keys for params, values of fixed parameters
-        res = least_squares(fcn2min,x0=initvals,kwargs=kargs,bounds=[lo,up],loss='cauchy')  #method='lm' does not support bounds
+        res = least_squares(fcn2min,x0=initvals,kwargs=kargs,bounds=[lo,up],loss=self.loss)  #method='lm' does not support bounds
         # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.least_squares.html
 
         self.data['LS']['res'] = res
@@ -275,6 +277,7 @@ class lc_fitter(object):
             I have chosen a simple chi2 gaussian errors likelihood here.'''
             model = transit(time=self.t,freevals=cube,**kargs)
             loglike = -np.sum( ((self.y-model)/self.yerr)**2 ) # CHI2
+            # TODO add loss functions
             return loglike
 
 

@@ -6,7 +6,7 @@ Check out the "nested" branch for a global solver using the Multinest library fo
 
 - Simple transit generator
 - Easily create noisy datasets
-- Parameter optimization with a simple uncertainty derivation powered by Scipy
+- Parameter optimization and uncertainty estimation (powered by Scipy)
     - For posterior parameter distributions check out the "nested" branch that uses MultiNest
 
 ![ELCA](https://github.com/pearsonkyle/Exoplanet-Light-Curve-Analysis/blob/master/Lightcurve%20Fit.png "Light Curve Modeling")

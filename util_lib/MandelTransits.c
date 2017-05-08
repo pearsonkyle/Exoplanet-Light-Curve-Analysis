@@ -232,17 +232,6 @@ double kepler_opt(double m, double eplusoverminus, double e)
 	return f;
 }
 
-int printVector2(float *vector, int Npoints)
-{
-	char string[Npoints+1];
-	int i;
-	for (i=0;i<Npoints;i++)
-	{
-		string[i] = (char) vector[i];
-	}
-	printf("%s",string);
-	return 0;
-}
 
 double occultuni(double z, double w)
 {
@@ -298,7 +287,7 @@ void occultquad(double *t, double p, double ar, double P, double i, double gamma
 	//double time_spent;
 	//begin = clock();
 
-	double tmidoverP;
+	double tmidoverP, tmidf;
 	double *Z, *phi, *new_phi; int ii;
 	int Npoints = (int)n;
 
@@ -313,10 +302,11 @@ void occultquad(double *t, double p, double ar, double P, double i, double gamma
 	double epoverm = sqrt((1.0+e)/(1.0-e));
 
 
-	// phase
-    for (ii=0; ii<Npoints; ii++) { phi[ii] = (t[ii]-tmid)*invP; }
-    // TODO test if tmid is the y-int of the transit cycle-time plot does phi still hold?
-
+	// phase + modification for time series longer than 1 period
+    for (ii=0; ii<Npoints; ii++) {
+			phi[ii] = (t[ii]-tmid)*invP;
+			phi[ii] = fmod(phi[ii],1);
+			if (phi[ii] > 0.5) phi[ii]-=1; }
 
 
 	double ti;//, pi = 3.14159265;
@@ -341,14 +331,16 @@ void occultquad(double *t, double p, double ar, double P, double i, double gamma
 		; x(12)= intercept of linear fit
 		 */
 		ti = t[ii];
+		//ti = phi[ii]*P + tmid;
 		if (0 == 0)	{	// Use MATLAB version or Erics version. If true, Eric's version.
 			double f1,e1,tp, m, f, radius;
 
 			f1 = 1.50*pi-longPericenter*pi*inv180;
 
 			e1 = e;
-			tp = tmid+P*sqrtee*0.5*invPi*(e1*sin(f1)/(1.0+e1*cos(f1))-2.0/sqrtee*atan( (sqrtee*tan(0.5*f1))/(1.0+e1) ));
 
+			// looping error perhaps comes from somewhere in here
+			tp = tmid+P*sqrtee*0.5*invPi*(e1*sin(f1)/(1.0+e1*cos(f1))-2.0/sqrtee*atan( (sqrtee*tan(0.5*f1))/(1.0+e1) ));
 			m = 2.0*pi*invP*(ti-tp);
 			f = kepler_opt(m,epoverm,e1);
 

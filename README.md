@@ -2,8 +2,6 @@
 
 A python 3 package for modeling exoplanet light curves. The transit function is based on the analytic expressions of Mandel and Agol 2002.
 
-Check out the "nested" branch for a global solver using the Multinest library for nested sampling. 
-
 - Simple transit generator
 - Easily create noisy datasets
 - Parameter optimization and uncertainty estimation (powered by Scipy)

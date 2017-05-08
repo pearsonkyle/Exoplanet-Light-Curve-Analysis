@@ -1,6 +1,6 @@
 # Exoplanet Light Curve Analysis
 
-A python package for modeling exoplanet light curves. The transit function is based on the analytic expressions of Mandel and Agol 2002 and is re-written in C for microsecond execution speeds.
+A python 3 package for modeling exoplanet light curves. The transit function is based on the analytic expressions of Mandel and Agol 2002.
 
 Check out the "nested" branch for a global solver using the Multinest library for nested sampling. 
 
@@ -46,6 +46,9 @@ if __name__ == "__main__":
                         init= init,
                         bounds= mybounds,
                         )
+
+    for k in myfit.data['LS']['freekeys']:
+        print( '{}: {:.6f} +- {:.6f}'.format(k,myfit.data['LS']['parameters'][k],myfit.data['LS']['errors'][k]) )
 
     myfit.plot_results(show=True,phase=True)
 

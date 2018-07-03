@@ -114,13 +114,11 @@ double heaviside(double x)
 {
 	// Translation of MATLAB's heaviside function
 	double result;
-	if (x < 0) {
+	if (x <= 0) {
 		result = 0;
 	} else if (x > 0) {
 		result = 1;
-	} else if (x == 0) {
-		result = 0.5;
-	}
+	} 
 	return result;
 }
 
@@ -232,17 +230,6 @@ double kepler_opt(double m, double eplusoverminus, double e)
 	return f;
 }
 
-int printVector2(float *vector, int Npoints)
-{
-	char string[Npoints+1];
-	int i;
-	for (i=0;i<Npoints;i++)
-	{
-		string[i] = (char) vector[i];
-	}
-	printf("%s",string);
-	return 0;
-}
 
 double occultuni(double z, double w)
 {
@@ -298,7 +285,7 @@ void occultquad(double *t, double p, double ar, double P, double i, double gamma
 	//double time_spent;
 	//begin = clock();
 
-	double tmidoverP;
+	double tmidoverP, tmidf;
 	double *Z, *phi, *new_phi; int ii;
 	int Npoints = (int)n;
 
@@ -313,10 +300,13 @@ void occultquad(double *t, double p, double ar, double P, double i, double gamma
 	double epoverm = sqrt((1.0+e)/(1.0-e));
 
 
-	// phase
-    for (ii=0; ii<Npoints; ii++) { phi[ii] = (t[ii]-tmid)*invP; }
-    // TODO test if tmid is the y-int of the transit cycle-time plot does phi still hold?
-
+	// phase + modification for time series longer than 1 period
+	for (ii=0; ii<Npoints; ii++) 
+	{
+			phi[ii] = (t[ii]-tmid)*invP;
+			phi[ii] = fmod(phi[ii],1);
+			if (phi[ii] > 0.5) phi[ii]-=1; 
+	}
 
 
 	double ti;//, pi = 3.14159265;
@@ -341,14 +331,16 @@ void occultquad(double *t, double p, double ar, double P, double i, double gamma
 		; x(12)= intercept of linear fit
 		 */
 		ti = t[ii];
+		//ti = phi[ii]*P + tmid;
 		if (0 == 0)	{	// Use MATLAB version or Erics version. If true, Eric's version.
 			double f1,e1,tp, m, f, radius;
 
 			f1 = 1.50*pi-longPericenter*pi*inv180;
 
 			e1 = e;
-			tp = tmid+P*sqrtee*0.5*invPi*(e1*sin(f1)/(1.0+e1*cos(f1))-2.0/sqrtee*atan( (sqrtee*tan(0.5*f1))/(1.0+e1) ));
 
+			// looping error perhaps comes from somewhere in here
+			tp = tmid+P*sqrtee*0.5*invPi*(e1*sin(f1)/(1.0+e1*cos(f1))-2.0/sqrtee*atan( (sqrtee*tan(0.5*f1))/(1.0+e1) ));
 			m = 2.0*pi*invP*(ti-tp);
 			f = kepler_opt(m,epoverm,e1);
 
@@ -401,59 +393,69 @@ void occultquad(double *t, double p, double ar, double P, double i, double gamma
 	    }
 	    double lam_d, eta_d;
 	    // Evaluate lambda_d and eta_d from MA2002 Table (1)
-	    if (z>=1+p || p==0 || fabs(phi[j])>(p+1.0)*invar*0.5*invPi) { // Case 1
-	    	lam_d = 0.0;
+	    if (z>=(1+p) || p==0 || fabs(phi[j])>(p+1.0)*invar*0.5*invPi) { // Case 1
+			lam_d = 0.0;
+			//lam_e = 0.0;
 	        eta_d = 0.0;
-	        //printf("Case 1\n");
+	       // if (j==0 || j == 1) printf("Case 1\n");
 	        //    printf("  Case 1 \n");
 	      } else if (p<0.5 && z>p && z<1-p) {// Case 3	-- switch order since most time should be spent in case 3
 			lam_d = lam2(p,z,a,b,k,q);
 			eta_d = eta2(p,z);
-		   // printf("Case 3 \n");
+		   // if (j==0 || j == 1) printf("Case 3 \n");
 			//printf("Case 3\n");
-		  } else if (z>=fabs(1.0-p) && z<1+p) { // Case 2
+		  } else if (z>=fabs(1.0-p) && z<(1+p)) { // Case 2
 	        lam_d = lam1(p,z,a,b,k,q);
 	        eta_d = eta1(p,z,a,b,k1,k0);
-	        //printf("  Case 2 \n");
+	       // if (j==0 || j == 1) printf("  Case 2 \n");
 	        //printf("z:%f \n",z);
 	       // printf("Case 2\n");
 	      } else if (p<0.5 && z==1-p) {// Case 4
 	        lam_d = lam5(p);
 	        eta_d = eta2(p,z);
-	       // printf("Case 4\n");
+	        //if (j==0 || j == 1) printf("Case 4\n");
 	      } else if (p<0.5 && z==p) { // Case 5
 	        lam_d = lam4(p);
 	        eta_d = eta2(p,z);
-	       // printf("Case 5\n");
+	        //if (j==0 || j ==0) printf("Case 5\n");
 	      } else if (p==0.5 && z==0.5) { // Case 6
 	        lam_d = inv3-4.0*invPi*inv9;
 	        eta_d = 3.0/32.0;
-	       // printf("Case 6\n");
+	       // if (j==0 || j == 1) printf("Case 6\n");
 	      } else if (p>0.5 && z==p) { // Case 7
 	        lam_d = lam3(p, k0, k1);
 	        eta_d = eta1(p,z,a,b,k1,k0);
-	        //printf("Case 7\n");
+	        //if(j==0 || j == 1) printf("Case 7\n");
 	      } else if (p>0.5 && z>=fabs(1.0-p) && z<p) { // Case 8
 	        lam_d = lam1(p,z,a,b,k,q);
 	        eta_d = eta1(p,z,a,b,k1,k0);
-	        //printf("Case 8\n");
+	       // if(j==0 || j == 1) printf("Case 8\n");
 	      } else if (p<1 && z>0 && z<=0.5-fabs(p-0.5)) {// Case 9
 	        lam_d = lam2(p,z,a,b,k,q);
 	        eta_d = eta2(p,z);
-	        //printf("Case 9\n");
+	       // if(j==0) printf("Case 9\n");
 	      } else if (p<1 && z==0) {  // Case 10
 	        lam_d = lam6(p);
 	        eta_d=eta2(p,z);
-	        //printf("Case 10\n");
+	        //if(j==0) printf("Case 10\n");
 	      } else if (p>1 && z<=p-1) {  // Case 11
-		    //printf("Case 11\n");
+		    //if(j==0) printf("Case 11\n");
 	    	lam_d = 0.0;
 	        eta_d = 0.5;
 	    }
 
+		//muo1 =1.-((1.-u1-2.*u2)*lambdae+(u1+2.*u2)*(lambdad+2./3.*(p > z))+ \
+                  u2*etad)/omega
+        //mu0=1.-lambdae
+
 	    ////F[j] =  1 - 1.0/(4*omega)*( (1-c2)*lam_e + c2*(lam_d+2.0/3.0*heaviside(p-z)) - c4*eta_d );
-	    F[j] = 1.0-((1.0-gamma1-2.0*gamma2)*lam_e+(gamma1+2.0*gamma2)*(lam_d+2.0/3.0*heaviside(p-z))+gamma2*eta_d)/omega; // Eric Agol's code inspired
-	    /* omega=1.d0-u1/3.d0-u2/6.d0
+	    F[j] = 1.0-( (1.0-gamma1-2.0*gamma2)*lam_e+(gamma1+2.0*gamma2)*(lam_d+2.0/3.0*heaviside(p-z))+gamma2*eta_d)/omega; // Eric Agol's code inspired
+		if (z>=(1+p) || p==0 || fabs(phi[j])>(p+1.0)*invar*0.5*invPi) { // Case 1
+			F[j] = 1; // F[j] != 1 when planet is not in sight
+		}
+
+
+		/* omega=1.d0-u1/3.d0-u2/6.d0
 		F=1.d0-((1.d0-u1-2.d0*u2)*lambdae+(u1+2.d0*u2)*(lambdad+2.d0/3.d0*(p gt z))+u2*etad)/omega*/
 	}
 	//return 0;

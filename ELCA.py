@@ -335,4 +335,9 @@ if __name__ == "__main__":
                         bounds= mybounds,
                         )
 
+    for k in myfit.data['LS']['freekeys']:
+        print( '{}: {:.6f} +- {:.6f}'.format(k,myfit.data['LS']['parameters'][k],myfit.data['LS']['errors'][k]) )
+
     myfit.plot_results(show=True,phase=True)
+
+    

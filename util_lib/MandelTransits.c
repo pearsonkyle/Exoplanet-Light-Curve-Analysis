@@ -301,12 +301,19 @@ void occultquad(double *t, double p, double ar, double P, double i, double gamma
 
 
 	// phase + modification for time series longer than 1 period
+<<<<<<< HEAD
 	for (ii=0; ii<Npoints; ii++) 
 	{
 			phi[ii] = (t[ii]-tmid)*invP;
 			phi[ii] = fmod(phi[ii],1);
 			if (phi[ii] > 0.5) phi[ii]-=1; 
 	}
+=======
+    for (ii=0; ii<Npoints; ii++) {
+			phi[ii] = (t[ii]-tmid)*invP;
+			phi[ii] = fmod(phi[ii],1);
+			if (phi[ii] > 0.5) phi[ii]-=1; }
+>>>>>>> 83939d15e627edca6c624ba3655569f57f866983
 
 
 	double ti;//, pi = 3.14159265;

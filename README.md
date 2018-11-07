@@ -55,6 +55,37 @@ if __name__ == "__main__":
     print( myfit.data['LS'].keys() )
 ```
 
+## Output
+
+```python 
+myfit = {
+    'LS': {
+        'res': ndarray,         # Optimize Result from scipy.optimize.least_squares fit
+        'finalmodel': ndarray,  # best fit model of light curve (transit+detrending model)
+        'residuals': ndarray,   # residual from light curve fit (data-finalmodel)
+        'transit': ndarray,     # just the transit model with no system trend
+        'phase': ndarray,       # lightcurve phase calculation based on fit mid transit
+        'parameters':{             
+            'rp': float, 'ar': float,   # Rp/Rs, a/Rs
+            'per': float, 'inc': float, # Period (days), Inclination
+            'u1': float, 'u2':  float,  # limb darkening (linear, quadratic)
+            'ecc': float, 'ome': float, # Eccentricity, Arg of periastron
+            'tm': float                 # tm = Mid Transit time (Days)
+            },
+        'errors':{
+            # same format as parameters
+            # uncertainty estimate on parameters 
+        }               
+    },
+
+    'NS':{
+        # Nested Sampling results (coming soon...)
+    }
+}
+```
+
+INCLUDE LIGHT CURVE FIT AND POSTERIOR MOSAIC HERE
+
 
 ## Set up and install from scratch
 

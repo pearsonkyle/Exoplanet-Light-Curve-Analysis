@@ -1,12 +1,17 @@
 # Exoplanet Light Curve Analysis with Nested Sampler
 
+<<<<<<< HEAD
 A python package for modeling exoplanet light curves. The transit function is based on the analytic expressions of Mandel and Agol 2002 and is re-written in C for microsecond execution speeds. This branch uses the mutlimodal nested sampling algorithm (https://arxiv.org/abs/0809.3437) to find a global solution. 
 
 Check out the "nested" branch for a global solver using the Multinest library for nested sampling. 
+=======
+A python 3 package for modeling exoplanet light curves. The transit function is based on the analytic expressions of Mandel and Agol 2002.
+>>>>>>> db9d3b2e57c27d18b63374daaad95e77d2bfa1dc
 
 - Simple transit generator
 - Easily create noisy datasets
-- Parameter optimization with a simple uncertainty derivation powered by Scipy
+- Parameter optimization and uncertainty estimation (powered by Scipy)
+    - For posterior parameter distributions check out the "nested" branch
 
 ![ELCA](https://github.com/pearsonkyle/Exoplanet-Light-Curve-Analysis/blob/master/Lightcurve%20Fit.png "Light Curve Modeling")
 
@@ -47,11 +52,45 @@ if __name__ == "__main__":
                         bounds= mybounds,
                         )
 
+    for k in myfit.data['LS']['freekeys']:
+        print( '{}: {:.6f} +- {:.6f}'.format(k,myfit.data['LS']['parameters'][k],myfit.data['LS']['errors'][k]) )
+
     myfit.plot_results(show=True,phase=True)
 
     # explore the output of the fitting
     print( myfit.data['LS'].keys() )
 ```
+
+## Output
+
+```python 
+myfit = {
+    'LS': {
+        'res': ndarray,         # Optimize Result from scipy.optimize.least_squares fit
+        'finalmodel': ndarray,  # best fit model of light curve (transit+detrending model)
+        'residuals': ndarray,   # residual from light curve fit (data-finalmodel)
+        'transit': ndarray,     # just the transit model with no system trend
+        'phase': ndarray,       # lightcurve phase calculation based on fit mid transit
+        'parameters':{             
+            'rp': float, 'ar': float,   # Rp/Rs, a/Rs
+            'per': float, 'inc': float, # Period (days), Inclination
+            'u1': float, 'u2':  float,  # limb darkening (linear, quadratic)
+            'ecc': float, 'ome': float, # Eccentricity, Arg of periastron
+            'tm': float                 # tm = Mid Transit time (Days)
+            },
+        'errors':{
+            # same format as parameters
+            # uncertainty estimate on parameters 
+        }               
+    },
+
+    'NS':{
+        # Nested Sampling results (coming soon...)
+    }
+}
+```
+
+INCLUDE LIGHT CURVE FIT AND POSTERIOR MOSAIC HERE
 
 
 ## Setting up the Nested Sampling Library

@@ -127,7 +127,11 @@ def _get_colors(num_colors):
 
 
 class lc_fitter(object):
+<<<<<<< HEAD
     def __init__(self,t,data,dataerr=None,init=None,bounds=None,airmass=False,nested=False,plot=False,loss='cauchy'):
+=======
+    def __init__(self,t,data,dataerr=None,init=None,bounds=None,airmass=False,ls=True,nested=False,plot=False,loss='huber'):
+>>>>>>> db9d3b2e57c27d18b63374daaad95e77d2bfa1dc
 
         self.t = np.array(t)
         self.y = np.array(data)
@@ -189,7 +193,11 @@ class lc_fitter(object):
 
         # params -> list of free parameters
         # kwargs -> keys for params, values of fixed parameters
+<<<<<<< HEAD
         res = least_squares(fcn2min,x0=initvals,kwargs=kargs,bounds=[lo,up],loss=self.loss)  #method='lm' does not support bounds
+=======
+        res = least_squares(fcn2min,x0=initvals,kwargs=kargs,bounds=[up,lo],loss=self.loss)  #method='lm' does not support bounds
+>>>>>>> db9d3b2e57c27d18b63374daaad95e77d2bfa1dc
         # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.least_squares.html
 
         self.data['LS']['res'] = res
@@ -454,5 +462,14 @@ if __name__ == "__main__":
                         nested=True
                         )
 
+<<<<<<< HEAD
     myfit.plot_results(show=True,t='NS')
     myfit.plot_posteriors()
+=======
+    for k in myfit.data['LS']['freekeys']:
+        print( '{}: {:.6f} +- {:.6f}'.format(k,myfit.data['LS']['parameters'][k],myfit.data['LS']['errors'][k]) )
+
+    myfit.plot_results(show=True,phase=True)
+
+    
+>>>>>>> db9d3b2e57c27d18b63374daaad95e77d2bfa1dc

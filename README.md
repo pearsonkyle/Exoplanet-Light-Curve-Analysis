@@ -12,8 +12,7 @@ Check out the "nested" branch for a global solver using the Multinest library fo
 ![ELCA](https://github.com/pearsonkyle/Exoplanet-Light-Curve-Analysis/blob/master/lightcurve_fit.png "Light Curve Modeling")
 
 ![ELCA](https://github.com/pearsonkyle/Exoplanet-Light-Curve-Analysis/blob/master/lightcurve_posterior.png "Posterior Distribution")
-
-
+ 
 ## Running the package
 ```python
 

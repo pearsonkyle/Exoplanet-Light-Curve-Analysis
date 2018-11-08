@@ -1,4 +1,5 @@
 import ctypes
+import corner
 import numpy as np
 from itertools import chain
 from colorsys import hls_to_rgb
@@ -112,26 +113,8 @@ def transit(**kwargs):
 
     return model
 
-
-# RAINBOW SPECTRUM!
-def _get_colors(num_colors):
-    colors=[]
-    for i in np.arange(0, 360, 360. / num_colors):
-        hue = i/360.
-        lightness = (50)/100.
-        saturation = (100)/100.
-        colors.append(hls_to_rgb(hue, lightness, saturation))
-    return colors
-
-
-
-
 class lc_fitter(object):
-<<<<<<< HEAD
     def __init__(self,t,data,dataerr=None,init=None,bounds=None,airmass=False,nested=False,plot=False,loss='cauchy'):
-=======
-    def __init__(self,t,data,dataerr=None,init=None,bounds=None,airmass=False,ls=True,nested=False,plot=False,loss='huber'):
->>>>>>> db9d3b2e57c27d18b63374daaad95e77d2bfa1dc
 
         self.t = np.array(t)
         self.y = np.array(data)
@@ -193,11 +176,7 @@ class lc_fitter(object):
 
         # params -> list of free parameters
         # kwargs -> keys for params, values of fixed parameters
-<<<<<<< HEAD
         res = least_squares(fcn2min,x0=initvals,kwargs=kargs,bounds=[lo,up],loss=self.loss)  #method='lm' does not support bounds
-=======
-        res = least_squares(fcn2min,x0=initvals,kwargs=kargs,bounds=[up,lo],loss=self.loss)  #method='lm' does not support bounds
->>>>>>> db9d3b2e57c27d18b63374daaad95e77d2bfa1dc
         # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.least_squares.html
 
         self.data['LS']['res'] = res
@@ -255,7 +234,7 @@ class lc_fitter(object):
         # adjust bounds based on uncertainties of LS
         paramlims = []
         for i in range(len(freekeys)):
-            nbound = 2*self.data['LS']['errors'][freekeys[i]]*SIGMA_TOL
+            nbound = self.data['LS']['errors'][freekeys[i]]*SIGMA_TOL
             if nbound < (up[i]-lo[i]):
                 paramlims.append( self.data['LS']['parameters'][freekeys[i]]-0.5*nbound )
                 paramlims.append( self.data['LS']['parameters'][freekeys[i]]+0.5*nbound )
@@ -342,7 +321,7 @@ class lc_fitter(object):
         # TODO add time, BIC, Bayes Evidence, Chi2
         # TODO add plotting of marginalized posteriors
 
-    def plot_results(self, detrend=False, phase=False, t='LS',show=False,title='Lightcurve Fit',save=False,output='png'):
+    def plot_results(self, detrend=False, phase=False, t='LS',show=False,title='Lightcurve Fit',savefile=None):
         '''
             Detrend - Removes airmass function
             Phase - plot in phase units
@@ -384,11 +363,10 @@ class lc_fitter(object):
             ax_res.set_xlim([low,up])
             ax_lc.set_xlim([low,up])
 
-
         # residual histogram
         # bins up to 3 std of Residuals
         maxbs = np.round(3*np.std(self.data['LS']['residuals'])*1e6,-2)
-        bins = np.linspace(-maxbs,maxbs,7)
+        bins = np.linspace(-maxbs,maxbs, np.sqrt(x.shape[0]) )
         inset_axes.hist( self.data[t]['residuals']*1e6,bins=bins, orientation="horizontal",color="black" )
         inset_axes.get_xaxis().set_visible(False)
         inset_axes.set_title('Residuals (PPM)')
@@ -415,28 +393,30 @@ class lc_fitter(object):
         if show:
             plt.show()
 
-        if save:
-            f.savefig(title+'.'+output)
-            plt.close(f)
+        if savefile:
+            plt.savefig(savefile)
+            plt.close()
 
 
-    def plot_posteriors(self,diag='kde'):
-        # TEMPORARY
-        import pandas as pd
-        from pandas.tools.plotting import scatter_matrix
+    def plot_posteriors(self,show=False,title='Lightcurve Posterior',savefile=None):
         values = self.data['NS']['analyzer'].get_equal_weighted_posterior()
-        df = pd.DataFrame(values[:,:-1],columns=tuple([ key for key in self.bounds.keys() ]))
-        scatter_matrix(df, alpha=0.2, diagonal=diag)
-        plt.show()
+        f = corner.corner(values[:,:-1], labels=tuple([ key for key in self.bounds.keys() ]), plot_contours=False, plot_density=False)
+        # TODO use math text 
+        f.suptitle(title)
+        if show:
+            plt.show()
 
+        if savefile:
+            plt.savefig(savefile )
+            plt.close()
 
 
 if __name__ == "__main__":
 
-    t = np.linspace(0.85,1.05,200)
+    t = np.linspace(0.85,1.05,400)
 
     init = { 'rp':0.06, 'ar':14.07,       # Rp/Rs, a/Rs
-             'per':3.336817, 'inc':88.75, # Period (days), Inclination
+             'per':3.336817, 'inc':87.5,  # Period (days), Inclination
              'u1': 0.3, 'u2': 0,          # limb darkening (linear, quadratic)
              'ecc':0, 'ome':0,            # Eccentricity, Arg of periastron
              'a0':1, 'a1':0,              # Airmass extinction terms
@@ -452,8 +432,8 @@ if __name__ == "__main__":
 
 
     # GENERATE NOISY DATA
-    data = transit(time=t, values=init) + np.random.normal(0, 2e-4, len(t))
-    dataerr = np.random.normal(300e-6, 50e-6, len(t))
+    data = transit(time=t, values=init) + np.random.normal(0, 4e-4, len(t))
+    dataerr = np.random.normal(400e-6, 50e-6, len(t))
 
     myfit = lc_fitter(t,data,
                         dataerr=dataerr,
@@ -462,14 +442,9 @@ if __name__ == "__main__":
                         nested=True
                         )
 
-<<<<<<< HEAD
-    myfit.plot_results(show=True,t='NS')
-    myfit.plot_posteriors()
-=======
+
     for k in myfit.data['LS']['freekeys']:
-        print( '{}: {:.6f} +- {:.6f}'.format(k,myfit.data['LS']['parameters'][k],myfit.data['LS']['errors'][k]) )
+        print( '{}: {:.6f} +- {:.6f}'.format(k,myfit.data['NS']['parameters'][k],myfit.data['NS']['errors'][k]) )
 
-    myfit.plot_results(show=True,phase=True)
-
-    
->>>>>>> db9d3b2e57c27d18b63374daaad95e77d2bfa1dc
+    myfit.plot_results(show=True,t='NS')
+    myfit.plot_posteriors(show=True)

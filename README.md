@@ -1,33 +1,28 @@
 # Exoplanet Light Curve Analysis with Nested Sampler
 
-<<<<<<< HEAD
 A python package for modeling exoplanet light curves. The transit function is based on the analytic expressions of Mandel and Agol 2002 and is re-written in C for microsecond execution speeds. This branch uses the mutlimodal nested sampling algorithm (https://arxiv.org/abs/0809.3437) to find a global solution. 
 
 Check out the "nested" branch for a global solver using the Multinest library for nested sampling. 
-=======
-A python 3 package for modeling exoplanet light curves. The transit function is based on the analytic expressions of Mandel and Agol 2002.
->>>>>>> db9d3b2e57c27d18b63374daaad95e77d2bfa1dc
 
 - Simple transit generator
 - Easily create noisy datasets
 - Parameter optimization and uncertainty estimation (powered by Scipy)
     - For posterior parameter distributions check out the "nested" branch
 
-![ELCA](https://github.com/pearsonkyle/Exoplanet-Light-Curve-Analysis/blob/master/Lightcurve%20Fit.png "Light Curve Modeling")
+![ELCA](https://github.com/pearsonkyle/Exoplanet-Light-Curve-Analysis/blob/master/lightcurve_fit.png "Light Curve Modeling")
 
+![ELCA](https://github.com/pearsonkyle/Exoplanet-Light-Curve-Analysis/blob/master/lightcurve_posterior.png "Posterior Distribution")
 
 
 ## Running the package
 ```python
-from ELCA import lc_fitter, transit
-import numpy as np
 
 if __name__ == "__main__":
 
-    t = np.linspace(0.85,1.05,200)
+    t = np.linspace(0.85,1.05,400)
 
     init = { 'rp':0.06, 'ar':14.07,       # Rp/Rs, a/Rs
-             'per':3.336817, 'inc':88.75, # Period (days), Inclination
+             'per':3.336817, 'inc':87.5,  # Period (days), Inclination
              'u1': 0.3, 'u2': 0,          # limb darkening (linear, quadratic)
              'ecc':0, 'ome':0,            # Eccentricity, Arg of periastron
              'a0':1, 'a1':0,              # Airmass extinction terms
@@ -43,22 +38,22 @@ if __name__ == "__main__":
 
 
     # GENERATE NOISY DATA
-    data = transit(time=t, values=init) + np.random.normal(0, 2e-4, len(t))
-    dataerr = np.random.normal(300e-6, 50e-6, len(t))
+    data = transit(time=t, values=init) + np.random.normal(0, 4e-4, len(t))
+    dataerr = np.random.normal(400e-6, 50e-6, len(t))
 
     myfit = lc_fitter(t,data,
                         dataerr=dataerr,
                         init= init,
                         bounds= mybounds,
+                        nested=True
                         )
 
+
     for k in myfit.data['LS']['freekeys']:
-        print( '{}: {:.6f} +- {:.6f}'.format(k,myfit.data['LS']['parameters'][k],myfit.data['LS']['errors'][k]) )
+        print( '{}: {:.6f} +- {:.6f}'.format(k,myfit.data['NS']['parameters'][k],myfit.data['NS']['errors'][k]) )
 
-    myfit.plot_results(show=True,phase=True)
-
-    # explore the output of the fitting
-    print( myfit.data['LS'].keys() )
+    myfit.plot_results(show=True,t='NS')
+    myfit.plot_posteriors(show=True)
 ```
 
 ## Output

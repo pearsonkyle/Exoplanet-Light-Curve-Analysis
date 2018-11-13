@@ -73,14 +73,25 @@ myfit = {
             'tm': float                 # tm = Mid Transit time (Days)
             },
         'errors':{
-            # same format as parameters
-            # uncertainty estimate on parameters 
+            
         }               
     },
 
-    'NS':{
-        # Nested Sampling results (coming soon...)
-    }
+    'NS': {
+        'res': ndarray,         # Optimize Result from scipy.optimize.least_squares fit
+        'finalmodel': ndarray,  # best fit model of light curve (transit+detrending model)
+        'residuals': ndarray,   # residual from light curve fit (data-finalmodel)
+        'transit': ndarray,     # just the transit model with no system trend
+        'phase': ndarray,       # lightcurve phase calculation based on fit mid transit
+        'parameters':{     
+            'rp','ar','per','inc','u1','u2','ecc','ome','tm' : float 
+            },
+        'errors':{
+            # same format as parameters
+            # uncertainty estimate on parameters from posterior distributions
+        },
+        'posteriors': ndarray,   # parameter space evaluations [N,#evals] (N=# free parameters)
+
 }
 ```
 

@@ -114,7 +114,8 @@ def transit(**kwargs):
     return model
 
 class lc_fitter(object):
-    def __init__(self,t,data,dataerr=None,init=None,bounds=None,airmass=False,nested=False,plot=False,loss='cauchy'):
+    def __init__(self,t,data,dataerr=None,init=None,bounds=None,airmass=False,nested=False,plot=False,loss='cauchy',
+                    live_points=250, evidence_tol=0.1):
 
         self.t = np.array(t)
         self.y = np.array(data)
@@ -142,7 +143,7 @@ class lc_fitter(object):
             # set up directory for nested sampler results
             if not path.exists("chains"): mkdir("chains")
 
-            self.live_points = 400
+            self.live_points = live_points
             self.ee = 0.1 # evidence tolerance
             self.fit_ns()
         # Nested sampling coming soon
@@ -183,10 +184,13 @@ class lc_fitter(object):
         self.data['LS']['finalmodel'] = transit(time=self.t,freevals=res.x,**kargs)
         self.data['LS']['residuals'] = self.y - self.data['LS']['finalmodel']
 
-        # compute uncertainties from covariance matrix from jacobian squared
-        perr = np.sqrt( np.diag( np.linalg.inv( np.dot( res.jac.T, res.jac) ) )) # diag[ (J.T*J)^-1 ]^0.5
-        #perr *= (self.data['LS']['residuals']**2).sum()/( len(self.y) - len(freekeys ) ) # scale by variance, variance is very small ~1e-8
-
+        try:
+            # compute uncertainties from covariance matrix from jacobian squared
+            perr = np.sqrt( np.diag( np.linalg.inv( np.dot( res.jac.T, res.jac) ) )) # diag[ (J.T*J)^-1 ]^0.5
+            #perr *= (self.data['LS']['residuals']**2).sum()/( len(self.y) - len(freekeys ) ) # scale by variance, variance is very small?
+        except:
+            perr = np.array(initvals)*0.01
+            perr[perr==0] = 0.01
 
         # add the best fit parameters to the fixed dictionary
         errordict = {}
@@ -197,7 +201,7 @@ class lc_fitter(object):
         # save data
         self.data['LS']['parameters'] = fixeddict
         self.data['LS']['errors'] = errordict
-        self.data['LS']['freekeys'] = freekeys
+        self.data['freekeys'] = freekeys
 
         # compute transit and airmass model separately
         keys = ['rp','ar','per','inc','u1','u2','ecc','ome','tm']
@@ -225,11 +229,9 @@ class lc_fitter(object):
     def fit_ns(self):
         SIGMA_TOL = 100 # boundary for hypercube parameter space
 
-
         # hopefully each iteration of for loop yields the same order (issue fixed in python 3.6)
         freekeys = tuple([ key for key in self.bounds.keys() ])
         lo,up = zip(*[ self.bounds[key] for key in self.bounds.keys() ])
-
 
         # adjust bounds based on uncertainties of LS
         paramlims = []
@@ -276,15 +278,16 @@ class lc_fitter(object):
         n_params = len(freekeys) #oddly, this needs to be specified
 
         pymultinest.run(myloglike, myprior_transit, n_params, evidence_tolerance=self.ee,multimodal=False,
-            resume = False, verbose = False, sampling_efficiency = 0.1, n_live_points=self.live_points)
+            resume = False, verbose = False, sampling_efficiency = self.ee, n_live_points=self.live_points)
 
         # lets analyse the results
         a = pymultinest.Analyzer(n_params = n_params) #retrieves the data that has been written to hard drive
-        s = a.get_stats()
-        values = s['marginals'] # gets the marginalized posterior probability distributions
-        self.data['NS']['global evidence'] = s['global evidence']
         self.data['NS']['analyzer'] = a
 
+        # information from MultiNest
+        self.data['NS']['stats'] = self.data['NS']['analyzer'].get_stats()
+        self.data['NS']['posteriors'] = self.data['NS']['analyzer'].get_data()[:,2:]
+        values = self.data['NS']['stats']['marginals'] # gets the marginalized posterior probability distributions
 
         # add the best fit parameters to the fixed dictionary
         errordict = {}
@@ -317,9 +320,6 @@ class lc_fitter(object):
 
         # COMPUTE PHASE
         self.data['NS']['phase'] = (self.t - self.data['NS']['parameters']['tm']) / self.data['NS']['parameters']['per']
-
-        # TODO add time, BIC, Bayes Evidence, Chi2
-        # TODO add plotting of marginalized posteriors
 
     def plot_results(self, detrend=False, phase=False, t='LS',show=False,title='Lightcurve Fit',savefile=None):
         '''
@@ -397,10 +397,8 @@ class lc_fitter(object):
             plt.savefig(savefile)
             plt.close()
 
-
     def plot_posteriors(self,show=False,title='Lightcurve Posterior',savefile=None):
-        values = self.data['NS']['analyzer'].get_equal_weighted_posterior()
-        f = corner.corner(values[:,:-1], labels=tuple([ key for key in self.bounds.keys() ]), plot_contours=False, plot_density=False)
+        f = corner.corner(self.data['NS']['posteriors'], labels=tuple([ key for key in self.bounds.keys() ]),bins=int(np.sqrt(self.data['NS']['posteriors'].shape[0])), plot_contours=False, plot_density=False)
         # TODO use math text 
         f.suptitle(title)
         if show:
@@ -413,14 +411,14 @@ class lc_fitter(object):
 
 if __name__ == "__main__":
 
-    t = np.linspace(0.85,1.05,400)
+    t = np.linspace(0.9,1.1, 0.2*(1./2)*24*60 )
 
-    init = { 'rp':0.06, 'ar':14.07,       # Rp/Rs, a/Rs
-             'per':3.336817, 'inc':87.5,  # Period (days), Inclination
+    init = { 'rp':0.05, 'ar':14.0,       # Rp/Rs, a/Rs
+             'per':3.5, 'inc':87.5,  # Period (days), Inclination
              'u1': 0.3, 'u2': 0,          # limb darkening (linear, quadratic)
              'ecc':0, 'ome':0,            # Eccentricity, Arg of periastron
              'a0':1, 'a1':0,              # Airmass extinction terms
-             'a2':0, 'tm':0.95 }          # tm = Mid Transit time (Days)
+             'a2':0, 'tm':1 }          # tm = Mid Transit time (Days)
 
     # only report params with bounds, all others will be fixed to initial value
     mybounds = {
@@ -429,7 +427,6 @@ if __name__ == "__main__":
               'a0':[-np.inf,np.inf],
               'a1':[-np.inf,np.inf]
               }
-
 
     # GENERATE NOISY DATA
     data = transit(time=t, values=init) + np.random.normal(0, 4e-4, len(t))
@@ -441,10 +438,53 @@ if __name__ == "__main__":
                         bounds= mybounds,
                         nested=True
                         )
-
-
-    for k in myfit.data['LS']['freekeys']:
+    for k in myfit.data['freekeys']:
         print( '{}: {:.6f} +- {:.6f}'.format(k,myfit.data['NS']['parameters'][k],myfit.data['NS']['errors'][k]) )
 
     myfit.plot_results(show=True,t='NS')
     myfit.plot_posteriors(show=True)
+
+    dude()
+    
+    f,ax = plt.subplots(2)
+    # for various signal to noise ratios
+    # various number of live points
+    snrs = np.logspace(0,1.25,8)
+
+    rp = []
+    err = []
+    tmid = []
+    terr = []
+    for i in snrs:
+        
+        # GENERATE NOISY DATA
+        data = transit(time=t, values=init) + np.random.normal(0, (init['rp']**2)/i, len(t))
+        dataerr = np.random.normal( 0.5*(init['rp']**2)/i, 50e-6, len(t))
+        
+        myfit = lc_fitter(t,data,
+                            dataerr=dataerr,
+                            init= init,
+                            bounds= mybounds,
+                            #nested=True
+                            )
+
+        rp.append( myfit.data['LS']['parameters']['rp'] ) 
+        err.append( myfit.data['LS']['errors']['rp'] ) 
+        tmid.append( myfit.data['LS']['parameters']['tm'] )
+        terr.append( myfit.data['LS']['errors']['tm'] )
+        del myfit 
+
+    ax[0].errorbar(snrs, rp,yerr=err,ls=None, label='SNR: {:.1f}'.format(i))
+    ax[1].errorbar(snrs, (np.array(tmid)-init['tm'])*24*60 ,yerr=np.array(terr)*24*60,ls=None, label='SNR: {:.1f}'.format(i))
+        
+    ax[0].axhline( init['rp'], color='black',ls='--', label='True')
+    ax[0].set_xlabel('SNR')
+    ax[0].legend(loc='best')
+    ax[0].set_ylabel('Rp/Rs')
+
+    ax[1].axhline( 0, color='black',ls='--', label='True')
+    ax[1].set_xlabel('SNR')
+    ax[1].legend(loc='best')
+    ax[1].set_ylabel('T_mid - True (min)')
+    plt.show()
+    

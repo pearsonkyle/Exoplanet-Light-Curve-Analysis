@@ -111,6 +111,11 @@ The nested sampling algorithm enables uncertainty estimations for each parameter
 
 ## Dependencies
 Please install the following libraries before running
+-[MultiNest](https://github.com/JohannesBuchner/MultiNest)
+-[PyMultiNest](https://github.com/JohannesBuchner/PyMultiNest) (Install after MultiNest)
+-Scipy
+-Numpy
+-Matplotlib
 
 
 ## Set up and install from scratch

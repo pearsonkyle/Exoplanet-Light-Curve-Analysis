@@ -73,7 +73,8 @@ myfit = {
             'tm': float                 # tm = Mid Transit time (Days)
             },
         'errors':{
-            
+            # same format as parameters
+            # uncertainty estimate on parameters from posterior distributions
         }               
     },
 

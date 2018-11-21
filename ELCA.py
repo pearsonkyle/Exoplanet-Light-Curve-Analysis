@@ -5,6 +5,7 @@ from itertools import chain
 from colorsys import hls_to_rgb
 import matplotlib.pyplot as plt
 from os import environ, path, mkdir
+from shutil import rmtree
 from mpl_toolkits.axes_grid.inset_locator import inset_axes
 from scipy.optimize import minimize, least_squares, curve_fit
 
@@ -115,7 +116,7 @@ def transit(**kwargs):
 
 class lc_fitter(object):
     def __init__(self,t,data,dataerr=None,init=None,bounds=None,airmass=False,nested=False,plot=False,loss='cauchy',
-                    live_points=250, evidence_tol=0.1):
+                    live_points=250, evidence_tol=0.5):
 
         self.t = np.array(t)
         self.y = np.array(data)
@@ -141,7 +142,11 @@ class lc_fitter(object):
         self.fit_ls()
         if nested:
             # set up directory for nested sampler results
-            if not path.exists("chains"): mkdir("chains")
+            if not path.exists("chains"): 
+                mkdir("chains")
+            else:
+                rmtree("chains")
+                mkdir("chains")
 
             self.live_points = live_points
             self.ee = 0.1 # evidence tolerance
@@ -190,7 +195,9 @@ class lc_fitter(object):
             #perr *= (self.data['LS']['residuals']**2).sum()/( len(self.y) - len(freekeys ) ) # scale by variance, variance is very small?
         except:
             perr = np.array(initvals)*0.01
-            perr[perr==0] = 0.01
+        
+        perr[perr==0] = 0.01
+        perr[np.isnan(perr)] = 0.01
 
         # add the best fit parameters to the fixed dictionary
         errordict = {}
@@ -227,24 +234,31 @@ class lc_fitter(object):
         # TODO COMPUTE CHI2
 
     def fit_ns(self):
-        SIGMA_TOL = 100 # boundary for hypercube parameter space
+        SIGMA_TOL = 25 # boundary for hypercube parameter space
 
         # hopefully each iteration of for loop yields the same order (issue fixed in python 3.6)
         freekeys = tuple([ key for key in self.bounds.keys() ])
         lo,up = zip(*[ self.bounds[key] for key in self.bounds.keys() ])
 
-        # adjust bounds based on uncertainties of LS
+        # adjust bounds based on uncertainties of LS if unbounded
         paramlims = []
         for i in range(len(freekeys)):
-            nbound = self.data['LS']['errors'][freekeys[i]]*SIGMA_TOL
-            if nbound < (up[i]-lo[i]):
-                paramlims.append( self.data['LS']['parameters'][freekeys[i]]-0.5*nbound )
-                paramlims.append( self.data['LS']['parameters'][freekeys[i]]+0.5*nbound )
+            
+            # uncertainties are too unreliable from LS to use this idea
+            #nbound = self.data['LS']['errors'][freekeys[i]]*SIGMA_TOL
+
+            if np.isinf(lo[i]):
+                paramlims.append( min(0, self.data['LS']['parameters'][freekeys[i]]-self.data['LS']['parameters'][freekeys[i]]) )
             else:
                 paramlims.append( lo[i] )
+                
+            if np.isinf(up[i]):
+                paramlims.append( max( self.data['LS']['parameters'][freekeys[i]]+self.data['LS']['parameters'][freekeys[i]],1) )
+            else:
                 paramlims.append( up[i] )
 
-
+        print(freekeys)
+        print(paramlims)
         # add fixed values to dictonary for transit function
         fixeddict = {};
         for i in self.init.keys():
@@ -277,8 +291,8 @@ class lc_fitter(object):
         ndim = len(freekeys)
         n_params = len(freekeys) #oddly, this needs to be specified
 
-        pymultinest.run(myloglike, myprior_transit, n_params, evidence_tolerance=self.ee,multimodal=False,
-            resume = False, verbose = False, sampling_efficiency = self.ee, n_live_points=self.live_points)
+        pymultinest.run(myloglike, myprior_transit, n_params, evidence_tolerance=self.ee, 
+            resume = False, verbose = False, sampling_efficiency=0.5, n_live_points=self.live_points, max_iter=150000)
 
         # lets analyse the results
         a = pymultinest.Analyzer(n_params = n_params) #retrieves the data that has been written to hard drive

@@ -1,6 +1,6 @@
 # Exoplanet Light Curve Analysis with Nested Sampler
 
-A python package for modeling exoplanet light curves. The transit function is based on the analytic expressions of Mandel and Agol 2002 and is re-written in C for microsecond execution speeds. This branch uses the mutlimodal nested sampling algorithm (https://arxiv.org/abs/0809.3437) to find a global solution. 
+A python package for modeling exoplanet light curves. The transit function is based on the analytic expressions of Mandel and Agol 2002 and is re-written in C for microsecond execution speeds. This branch uses the mutlimodal nested sampling algorithm (https://arxiv.org/abs/1306.2144) to find a global solution. 
 
 Check out the "nested" branch for a global solver using the Multinest library for nested sampling. 
 
@@ -9,9 +9,7 @@ Check out the "nested" branch for a global solver using the Multinest library fo
 - Parameter optimization and uncertainty estimation (powered by Scipy)
     - For posterior parameter distributions check out the "nested" branch
 
-![ELCA](https://github.com/pearsonkyle/Exoplanet-Light-Curve-Analysis/blob/master/lightcurve_fit.png "Light Curve Modeling")
-
-![ELCA](https://github.com/pearsonkyle/Exoplanet-Light-Curve-Analysis/blob/master/lightcurve_posterior.png "Posterior Distribution")
+![alt text](https://github.com/pearsonkyle/Exoplanet-Light-Curve-Analysis/raw/nested/lightcurve_fit.png "Light Curve Modeling")
  
 ## Running the package
 ```python
@@ -59,6 +57,8 @@ if __name__ == "__main__":
 
 ```python 
 myfit = {
+    'freekeys': list,           # parameter dictionary keys that correspond to the parameters being solved for
+                                # obeys the same format as 'parameters' below
     'LS': {
         'res': ndarray,         # Optimize Result from scipy.optimize.least_squares fit
         'finalmodel': ndarray,  # best fit model of light curve (transit+detrending model)
@@ -92,16 +92,22 @@ myfit = {
             # uncertainty estimate on parameters from posterior distributions
         },
         'posteriors': ndarray,   # parameter space evaluations [N,#evals] (N=# free parameters)
-
+        'stats': {               # Output from get_stats_mode() in PyMultiNest 
+            'modes',             # see: https://johannesbuchner.github.io/PyMultiNest/pymultinest_analyse.html 
+            'marginals',
+            'nested sampling global log-evidence', 
+            'nested sampling global log-evidence error', 
+            'global evidence', 'global evidence error', 
+            'nested importance sampling global log-evidence', 
+            'nested importance sampling global log-evidence error',
+        },                       
+                                 
 }
 ```
 
-INCLUDE LIGHT CURVE FIT AND POSTERIOR MOSAIC HERE
-
-
-## Setting up the Nested Sampling Library
-
-COMING SOON...
+## Parameter Uncertainty Estimation 
+The nested sampling algorithm enables uncertainty estimations for each parameter from their posterior distribution. 
+![alt text](https://github.com/pearsonkyle/Exoplanet-Light-Curve-Analysis/raw/nested/lightcurve_posterior.png "Posterior Distribution")
 
 
 ## Set up and install from scratch

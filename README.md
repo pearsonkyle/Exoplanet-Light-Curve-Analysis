@@ -5,7 +5,8 @@ A python 3 package for modeling exoplanet light curves. The transit function is 
 - Simple transit generator
 - Easily create noisy datasets
 - Parameter optimization and uncertainty estimation (powered by Scipy)
-    - For posterior parameter distributions check out the "nested" branch
+
+### For posterior inference in a Bayesian framework please see the [nested](https://github.com/pearsonkyle/Exoplanet-Light-Curve-Analysis/tree/nested) branch
 
 ![ELCA](https://github.com/pearsonkyle/Exoplanet-Light-Curve-Analysis/blob/master/Lightcurve%20Fit.png "Light Curve Modeling")
 
@@ -76,15 +77,11 @@ myfit = {
             # same format as parameters
             # uncertainty estimate on parameters 
         }               
-    },
-
-    'NS':{
-        # Nested Sampling results (coming soon...)
     }
+    
+    # For posterior parameter distributions please see the "nested" branch of this repo
 }
 ```
-
-INCLUDE LIGHT CURVE FIT AND POSTERIOR MOSAIC HERE
 
 
 ## Set up and install from scratch

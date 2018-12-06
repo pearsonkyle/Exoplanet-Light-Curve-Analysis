@@ -284,7 +284,7 @@ class lc_fitter(object):
             I have chosen a simple chi2 gaussian errors likelihood here.'''
             model = transit(time=self.t,freevals=cube,**kargs)
             chi2 = ((self.y-model)/self.yerr)**2
-            loglike = -np.sum( loss[self.loss](chi2) ) # CHI2
+            loglike = -np.sum( loss[self.loss](chi2) )
             return loglike
 
 

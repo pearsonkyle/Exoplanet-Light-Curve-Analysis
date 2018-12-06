@@ -115,7 +115,7 @@ def transit(**kwargs):
     return model
 
 class lc_fitter(object):
-    def __init__(self,t,data,dataerr=None,init=None,bounds=None,airmass=False,nested=False,plot=False,loss='cauchy',
+    def __init__(self,t,data,dataerr=None,init=None,bounds=None,airmass=False,nested=False,plot=False,loss='linear',
                     live_points=250, evidence_tol=0.5):
 
         self.t = np.array(t)
@@ -274,13 +274,17 @@ class lc_fitter(object):
             for i in range(len(freekeys)): # for only the free params
                 cube[i] = (paramlimits[2*i+1] - paramlimits[2*i])*cube[i]+paramlimits[2*i]
 
-
+        # loss functions to diminish outlier influence
+        loss = {
+            'linear': lambda z: z,
+            'soft_l1' : lambda z : 2 * ((1 + z)**0.5 - 1),
+        }
         def myloglike(cube, ndim, n_params):
             '''The most important function. What is your likelihood function?
             I have chosen a simple chi2 gaussian errors likelihood here.'''
             model = transit(time=self.t,freevals=cube,**kargs)
-            loglike = -np.sum( ((self.y-model)/self.yerr)**2 ) # CHI2
-            # TODO add loss functions
+            chi2 = ((self.y-model)/self.yerr)**2
+            loglike = -np.sum( loss[self.loss](chi2) ) # CHI2
             return loglike
 
 
@@ -450,13 +454,16 @@ if __name__ == "__main__":
                         dataerr=dataerr,
                         init= init,
                         bounds= mybounds,
-                        nested=True
+                        nested=True,
+                        loss='soft_l1'
                         )
     for k in myfit.data['freekeys']:
         print( '{}: {:.6f} +- {:.6f}'.format(k,myfit.data['NS']['parameters'][k],myfit.data['NS']['errors'][k]) )
 
     myfit.plot_results(show=True,t='NS')
     myfit.plot_posteriors(show=True)
+
+
 
     dude()
     

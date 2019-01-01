@@ -15,13 +15,10 @@
 #include <stdio.h>
 #include <string.h>
 
-
-
 #define pi 3.14159265358979311600
 #define invPi 1./3.1415926535897931160
 #define inv3 1./3
 #define inv9 1./9
-
 
 void occultquad(double *t, double p, double ar, double P, double i, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F);
 
@@ -60,7 +57,9 @@ double PI(double n, double k)
 		if (quantity > 1.0e-13) {
 			kc = 2.0*sqrt(e);
 			e = kc*m0;
-		} else { continueLoop = 0; }
+		} 
+        else { continueLoop = 0; 
+        }
 	}
 	return 0.5*dpi*(c*m0+d)/(m0*(m0+p));
 }
@@ -73,7 +72,9 @@ double K(double k)
 
 	double m1, a0, a1, a2, a3, a4, b0, b1, b2, b3, b4, ek1, ek2;
 	m1 = 1.0-k*k;
-	if (k*k > 1) {printf("WARNING: k*k > 1, elliptic integral of first kind, K, will return nan");}
+	if (k*k > 1) {
+        printf("WARNING: k*k > 1, elliptic integral of first kind, K, will return nan");
+    }
 	a0 = 1.386294361120;
 	a1 = 0.096663442590;
 	a2 = 0.035900923830;
@@ -114,7 +115,8 @@ double heaviside(double x)
 	double result;
 	if (x <= 0) {
 		result = 0;
-	} else if (x > 0) {
+	} 
+    else if (x > 0) {
 		result = 1;
 	} 
 	return result;
@@ -206,10 +208,13 @@ double kepler(double m, double e)
 	if (e != 0.0) {
 		ekep = ekepler(m,e);
 		f = 2.0*atan(sqrt((1.0+e)/(1.0-e))*tan(0.50*ekep));
-	} else {
+	} 
+    else {
 		f = m;
 	}
-	if (m == 0.0) {f=0.0;}
+	if (m == 0.0) {
+        f=0.0;
+    }
 	return f;
 }
 
@@ -222,10 +227,11 @@ double kepler_opt(double m, double eplusoverminus, double e)
 	} else {
 		f = m;
 	}
-	if (m == 0.0) {f=0.0;}
+	if (m == 0.0) {
+        f=0.0;
+    }
 	return f;
 }
-
 
 double occultuni(double z, double w)
 {
@@ -241,12 +247,14 @@ double occultuni(double z, double w)
 
 		if (xt < 1.0) {
 			dblcondA = 1;
-		} else {
+		} 
+        else {
 			dblcondA = 0;
 		}
 		if (xt >= 1.0) {
 			dblcondB = 1;
-		} else {
+		} 
+        else {
 			dblcondB = 0;
 		}
 
@@ -259,7 +267,8 @@ double occultuni(double z, double w)
 
 		if (xt >= 0.0) {
 			dblcond = 1;
-		} else {
+		} 
+        else {
 			dblcond = 0;
 		}
 
@@ -288,15 +297,13 @@ void occultquad(double *t, double p, double ar, double P, double i, double gamma
 	double inv180 = 1./180.;
 	double epoverm = sqrt((1.0+e)/(1.0-e));
 
-
 	// phase + modification for time series longer than 1 period
 	for (ii=0; ii<Npoints; ii++) 
 	{
-			phi[ii] = (t[ii]-tmid)*invP;
-			phi[ii] = fmod(phi[ii],1);
-			if (phi[ii] > 0.5) phi[ii]-=1; 
+        phi[ii] = (t[ii]-tmid)*invP;
+        phi[ii] = fmod(phi[ii],1);
+        if (phi[ii] > 0.5) phi[ii]-=1; 
 	}
-
 
 	double ti;
 	double omega;
@@ -319,23 +326,19 @@ void occultquad(double *t, double p, double ar, double P, double i, double gamma
 		; x(12)= intercept of linear fit
 		 */
 		ti = t[ii];
-		//ti = phi[ii]*P + tmid;
 		if (0 == 0)	{	// Use MATLAB version or Erics version. If true, Eric's version.
 			double f1,e1,tp, m, f, radius;
-
 			f1 = 1.50*pi-longPericenter*pi*inv180;
-
 			e1 = e;
 
 			// looping error perhaps comes from somewhere in here
 			tp = tmid+P*sqrtee*0.5*invPi*(e1*sin(f1)/(1.0+e1*cos(f1))-2.0/sqrtee*atan( (sqrtee*tan(0.5*f1))/(1.0+e1) ));
 			m = 2.0*pi*invP*(ti-tp);
 			f = kepler_opt(m,epoverm,e1);
-
-
 			radius = ar*(1.0 - e1*e1)/(1.0 + e1*cos(f));
 			Z[ii] = radius*sqrt(1.0-(sin(i*pi*inv180)*sin(longPericenter*pi*inv180+f))*(sin(i*pi*inv180)*sin(longPericenter*pi*inv180+f))); //Eric Agol's code inspired
-		} else {
+		} 
+        else {
 			Z[ii] = ar*sqrt(sin(2*pi*invP*ti)*sin(2*pi*invP*ti) + (cos(pi*inv180*i)*cos(2*pi*invP*ti))*(cos(pi*inv180*i)*cos(2*pi*invP*ti))); // MATLAB VERSION
 		}
 	}

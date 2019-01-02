@@ -149,5 +149,22 @@ Update your .bashrc file after adding those two lines
 ```
 source .bashrc
 ```
-DISCLAIMER:
-If you did not download the python package to your $HOME directory then you will need to make changes to where the PATHS point. If you do not have a .bashrc file or .bash_profile file then you may need to create one. If you're installing this on windows you may have some difficulty and I would reccomend looking at this: http://www.howtogeek.com/249966/how-to-install-and-use-the-linux-bash-shell-on-windows-10/ Email me for more windows instructions if you're on a windows system < v10.
+
+## Citation 
+If you use any of these algorithms from this repo please cite the article below
+
+[Pearson K. A., et al., 2019, AJ, 157, 21](http://iopscience.iop.org/article/10.3847/1538-3881/aaf1ae/meta)
+
+Here is an example bibtex
+```
+@article{Pearson2019,
+  author={Kyle A. Pearson and Caitlin A. Griffith and Robert T. Zellem and Tommi T. Koskinen and Gael M. Roudier},
+  title={Ground-based Spectroscopy of the Exoplanet XO-2b Using a Systematic Wavelength Calibration},
+  journal={The Astronomical Journal},
+  volume={157},
+  number={1},
+  pages={21},
+  url={http://stacks.iop.org/1538-3881/157/i=1/a=21},
+  year={2019}
+}
+```

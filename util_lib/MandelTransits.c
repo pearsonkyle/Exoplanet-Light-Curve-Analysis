@@ -15,15 +15,11 @@
 #include <stdio.h>
 #include <string.h>
 
-
-
 #define pi 3.14159265358979311600
 #define invPi 1./3.1415926535897931160
 #define inv3 1./3
 #define inv9 1./9
 
-
-//void occultquad(double *t, float p, float ar, float P, float i, float gamma1, float gamma2, double e, double longPericenter, double tmid, float n, double *F);
 void occultquad(double *t, double p, double ar, double P, double i, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F);
 
 // Elliptic integregral arproximations
@@ -33,7 +29,7 @@ double K(double k);
 
 double PI(double n, double k)
 {
-	//Computes the complete elliptical integral of the third kind using the algorithm of Bulirsch (1965):
+	// Computes the complete elliptical integral of the third kind using the algorithm of Bulirsch (1965):
 	// Translation of Eric's "ellpic_bulirsch"
 	double m0, kc, c, p, d, e, f, dpi, quantity, g;
 	int continueLoop;
@@ -61,7 +57,9 @@ double PI(double n, double k)
 		if (quantity > 1.0e-13) {
 			kc = 2.0*sqrt(e);
 			e = kc*m0;
-		} else { continueLoop = 0; }
+		} 
+        else { continueLoop = 0; 
+        }
 	}
 	return 0.5*dpi*(c*m0+d)/(m0*(m0+p));
 }
@@ -74,7 +72,9 @@ double K(double k)
 
 	double m1, a0, a1, a2, a3, a4, b0, b1, b2, b3, b4, ek1, ek2;
 	m1 = 1.0-k*k;
-	if (k*k > 1) {printf("WARNING: k*k > 1, elliptic integral of first kind, K, will return nan");}
+	if (k*k > 1) {
+        printf("WARNING: k*k > 1, elliptic integral of first kind, K, will return nan");
+    }
 	a0 = 1.386294361120;
 	a1 = 0.096663442590;
 	a2 = 0.035900923830;
@@ -112,11 +112,11 @@ double E(double k)
 
 double heaviside(double x)
 {
-	// Translation of MATLAB's heaviside function
 	double result;
 	if (x <= 0) {
 		result = 0;
-	} else if (x > 0) {
+	} 
+    else if (x > 0) {
 		result = 1;
 	} 
 	return result;
@@ -126,7 +126,7 @@ double lam1(double p, double z, double a, double b, double k, double q)
 {
 	double inva = 1./a;
 	double lam1, en;
-	en=inva-1.0; // Eric Agol inspired:  en=1.d0/a-1.d0
+	en=inva-1.0; 
 	lam1 = (((1.0-b)*(2.0*b+a-3.0)-3.0*q*(b-2.0))*K(k)+4.0*p*z*(z*z+7.0*p*p-4.0)*E(k)-3.0*q*inva*PI(en,k))*inv9*invPi/sqrt(p*z); // Eric Agol's code inspired
 	return lam1;
 }
@@ -135,8 +135,8 @@ double lam2(double p, double z, double a, double b, double k, double q)
 {
 	double inva = 1./a;
 	double lam2;
-	double invk = 2.0*sqrt(p*z/(1.0-a)); // Eric Agol's code inspired
-	double en=b*inva-1.0;					// Eric Agol's code inspired
+	double invk = 2.0*sqrt(p*z/(1.0-a)); 
+	double en=b*inva-1.0;					
 	lam2 = 2.0*inv9*invPi/sqrt(1-a) * ( (1-5*z*z+p*p+q*q)*K(invk) + (1-a)*(z*z+7*p*p-4)*E(invk)-3*q*inva*PI(en,invk) );
 	return lam2;
 }
@@ -144,8 +144,6 @@ double lam2(double p, double z, double a, double b, double k, double q)
 double lam3(double p, double k0, double k1)
 {
 	double lam3 = inv3 + 16*p*inv9*invPi*(2*p*p-1)*E(0.5/p) - (1-4*p*p)*(3-8*p*p)*inv9*invPi/p*K(0.5/p);
-	k0 = acos(1.0-0.5/(p*p)); // Eric Agol's code inspired
-	k1 = acos(0.5/p);		  // Eric Agol's code inspired
 	return lam3;
 }
 
@@ -186,7 +184,7 @@ double ekepler(double m, double e)
 	double ekep,eps,pi2,ms,d3,e0,f0,f1,f2,f3,d1,d2;
 	eps = 1.0E-10;
 	pi2 = 2.0*pi;
-	ms = fmod(m,pi2);//m % pi2;
+	ms = fmod(m,pi2);
 	d3 = 1.0E10;
 	e0 = ms+e*0.85*sin(ms)/fabs(sin(ms));
 	while (fabs(d3) > eps)
@@ -210,10 +208,13 @@ double kepler(double m, double e)
 	if (e != 0.0) {
 		ekep = ekepler(m,e);
 		f = 2.0*atan(sqrt((1.0+e)/(1.0-e))*tan(0.50*ekep));
-	} else {
+	} 
+    else {
 		f = m;
 	}
-	if (m == 0.0) {f=0.0;}
+	if (m == 0.0) {
+        f=0.0;
+    }
 	return f;
 }
 
@@ -226,14 +227,12 @@ double kepler_opt(double m, double eplusoverminus, double e)
 	} else {
 		f = m;
 	}
-	if (m == 0.0) {f=0.0;}
+	if (m == 0.0) {
+        f=0.0;
+    }
 	return f;
 }
 
-<<<<<<< HEAD
-=======
-
->>>>>>> db9d3b2e57c27d18b63374daaad95e77d2bfa1dc
 double occultuni(double z, double w)
 {
 	double xt, kar1, kar0, lambdae, dblcond, dblcondA, dblcondB, muo1;
@@ -248,12 +247,14 @@ double occultuni(double z, double w)
 
 		if (xt < 1.0) {
 			dblcondA = 1;
-		} else {
+		} 
+        else {
 			dblcondA = 0;
 		}
 		if (xt >= 1.0) {
 			dblcondB = 1;
-		} else {
+		} 
+        else {
 			dblcondB = 0;
 		}
 
@@ -266,7 +267,8 @@ double occultuni(double z, double w)
 
 		if (xt >= 0.0) {
 			dblcond = 1;
-		} else {
+		} 
+        else {
 			dblcond = 0;
 		}
 
@@ -280,47 +282,30 @@ double occultuni(double z, double w)
 	return muo1;
 }
 
-
-//void occultquad(double *t, float p, float ar, float P, float i, float gamma1, float gamma2, double e, double longPericenter, double tmid, float n, double *F)
 void occultquad(double *t, double p, double ar, double P, double i, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F)
 {
-	//clock_t begin,end;
-	//double time_spent;
-	//begin = clock();
-
 	double tmidoverP, tmidf;
 	double *Z, *phi, *new_phi; int ii;
 	int Npoints = (int)n;
 
-    Z = (double *) malloc(sizeof(double)*Npoints);//assert(var != NULL);
-    phi = (double *) malloc(sizeof(double)*Npoints); //assert(var != NULL);
+    Z = (double *) malloc(sizeof(double)*Npoints);
+    phi = (double *) malloc(sizeof(double)*Npoints);
 
 	// optimization parameters
 	double invP = 1./P;
-	//double invPi = 1./pi;
 	double sqrtee = sqrt(1-e*e);
 	double inv180 = 1./180.;
 	double epoverm = sqrt((1.0+e)/(1.0-e));
 
-
-<<<<<<< HEAD
-	// phase
-    for (ii=0; ii<Npoints; ii++) { phi[ii] = fmod( (t[ii]-tmid)*invP, 1.); }
-    // TODO test if tmid is the y-int of the transit cycle-time plot does phi still hold?
-
-=======
 	// phase + modification for time series longer than 1 period
 	for (ii=0; ii<Npoints; ii++) 
 	{
-			phi[ii] = (t[ii]-tmid)*invP;
-			phi[ii] = fmod(phi[ii],1);
-			if (phi[ii] > 0.5) phi[ii]-=1; 
+        phi[ii] = (t[ii]-tmid)*invP;
+        phi[ii] = fmod(phi[ii],1);
+        if (phi[ii] > 0.5) phi[ii]-=1; 
 	}
->>>>>>> db9d3b2e57c27d18b63374daaad95e77d2bfa1dc
 
-
-	double ti;//, pi = 3.14159265;
-	//double c1, c2, c3, c4, c0, omega;
+	double ti;
 	double omega;
 	for (ii=0; ii<Npoints; ii++)
 	{
@@ -341,35 +326,24 @@ void occultquad(double *t, double p, double ar, double P, double i, double gamma
 		; x(12)= intercept of linear fit
 		 */
 		ti = t[ii];
-		//ti = phi[ii]*P + tmid;
 		if (0 == 0)	{	// Use MATLAB version or Erics version. If true, Eric's version.
 			double f1,e1,tp, m, f, radius;
-
 			f1 = 1.50*pi-longPericenter*pi*inv180;
-
 			e1 = e;
 
 			// looping error perhaps comes from somewhere in here
 			tp = tmid+P*sqrtee*0.5*invPi*(e1*sin(f1)/(1.0+e1*cos(f1))-2.0/sqrtee*atan( (sqrtee*tan(0.5*f1))/(1.0+e1) ));
 			m = 2.0*pi*invP*(ti-tp);
 			f = kepler_opt(m,epoverm,e1);
-
-
 			radius = ar*(1.0 - e1*e1)/(1.0 + e1*cos(f));
 			Z[ii] = radius*sqrt(1.0-(sin(i*pi*inv180)*sin(longPericenter*pi*inv180+f))*(sin(i*pi*inv180)*sin(longPericenter*pi*inv180+f))); //Eric Agol's code inspired
-		} else {
+		} 
+        else {
 			Z[ii] = ar*sqrt(sin(2*pi*invP*ti)*sin(2*pi*invP*ti) + (cos(pi*inv180*i)*cos(2*pi*invP*ti))*(cos(pi*inv180*i)*cos(2*pi*invP*ti))); // MATLAB VERSION
 		}
 	}
 
-	/*c1=0;
-	c2=gamma1+2*gamma2;
-	c3=0;
-	c4=-gamma2;
-	c0=1-c1-c2-c3-c4;*/
-	//omega = c0/(0+4)+c1/(1+4)+c2/(2+4)+c3/(3+4)+c4/(4+4);
-	//omega=1.d0-u1/3.d0-u2/6.d0
-	omega=1.0-gamma1*inv3-gamma2/6.0;// Eric Agol's code inspired
+	omega=1.0-gamma1*inv3-gamma2/6.0;
 
 	int j = 0;
 	double z, a, b, k, q, k1, k0, lam_e, F0;
@@ -405,74 +379,44 @@ void occultquad(double *t, double p, double ar, double P, double i, double gamma
 	    // Evaluate lambda_d and eta_d from MA2002 Table (1)
 	    if (z>=(1+p) || p==0 || fabs(phi[j])>(p+1.0)*invar*0.5*invPi) { // Case 1
 			lam_d = 0.0;
-			//lam_e = 0.0;
 	        eta_d = 0.0;
-	       // if (j==0 || j == 1) printf("Case 1\n");
-	        //    printf("  Case 1 \n");
 	      } else if (p<0.5 && z>p && z<1-p) {// Case 3	-- switch order since most time should be spent in case 3
 			lam_d = lam2(p,z,a,b,k,q);
 			eta_d = eta2(p,z);
-		   // if (j==0 || j == 1) printf("Case 3 \n");
-			//printf("Case 3\n");
 		  } else if (z>=fabs(1.0-p) && z<(1+p)) { // Case 2
 	        lam_d = lam1(p,z,a,b,k,q);
 	        eta_d = eta1(p,z,a,b,k1,k0);
-	       // if (j==0 || j == 1) printf("  Case 2 \n");
-	        //printf("z:%f \n",z);
-	       // printf("Case 2\n");
 	      } else if (p<0.5 && z==1-p) {// Case 4
 	        lam_d = lam5(p);
 	        eta_d = eta2(p,z);
-	        //if (j==0 || j == 1) printf("Case 4\n");
 	      } else if (p<0.5 && z==p) { // Case 5
 	        lam_d = lam4(p);
 	        eta_d = eta2(p,z);
-	        //if (j==0 || j ==0) printf("Case 5\n");
 	      } else if (p==0.5 && z==0.5) { // Case 6
 	        lam_d = inv3-4.0*invPi*inv9;
 	        eta_d = 3.0/32.0;
-	       // if (j==0 || j == 1) printf("Case 6\n");
 	      } else if (p>0.5 && z==p) { // Case 7
 	        lam_d = lam3(p, k0, k1);
 	        eta_d = eta1(p,z,a,b,k1,k0);
-	        //if(j==0 || j == 1) printf("Case 7\n");
 	      } else if (p>0.5 && z>=fabs(1.0-p) && z<p) { // Case 8
 	        lam_d = lam1(p,z,a,b,k,q);
 	        eta_d = eta1(p,z,a,b,k1,k0);
-	       // if(j==0 || j == 1) printf("Case 8\n");
 	      } else if (p<1 && z>0 && z<=0.5-fabs(p-0.5)) {// Case 9
 	        lam_d = lam2(p,z,a,b,k,q);
 	        eta_d = eta2(p,z);
-	       // if(j==0) printf("Case 9\n");
 	      } else if (p<1 && z==0) {  // Case 10
 	        lam_d = lam6(p);
 	        eta_d=eta2(p,z);
-	        //if(j==0) printf("Case 10\n");
 	      } else if (p>1 && z<=p-1) {  // Case 11
-		    //if(j==0) printf("Case 11\n");
 	    	lam_d = 0.0;
 	        eta_d = 0.5;
 	    }
 
-		//muo1 =1.-((1.-u1-2.*u2)*lambdae+(u1+2.*u2)*(lambdad+2./3.*(p > z))+ \
-                  u2*etad)/omega
-        //mu0=1.-lambdae
-
-	    ////F[j] =  1 - 1.0/(4*omega)*( (1-c2)*lam_e + c2*(lam_d+2.0/3.0*heaviside(p-z)) - c4*eta_d );
-	    F[j] = 1.0-( (1.0-gamma1-2.0*gamma2)*lam_e+(gamma1+2.0*gamma2)*(lam_d+2.0/3.0*heaviside(p-z))+gamma2*eta_d)/omega; // Eric Agol's code inspired
+		F[j] = 1.0-( (1.0-gamma1-2.0*gamma2)*lam_e+(gamma1+2.0*gamma2)*(lam_d+2.0/3.0*heaviside(p-z))+gamma2*eta_d)/omega; // Eric Agol's code inspired
 		if (z>=(1+p) || p==0 || fabs(phi[j])>(p+1.0)*invar*0.5*invPi) { // Case 1
 			F[j] = 1; // F[j] != 1 when planet is not in sight
 		}
-
-
-		/* omega=1.d0-u1/3.d0-u2/6.d0
-		F=1.d0-((1.d0-u1-2.d0*u2)*lambdae+(u1+2.d0*u2)*(lambdad+2.d0/3.d0*(p gt z))+u2*etad)/omega*/
 	}
-	//return 0;
     free(Z);
     free(phi);
-
-    //end = clock();
-    //time_spent = (double)(end-begin)/CLOCKS_PER_SEC;
-    //printf("%f\n", time_spent);
 }

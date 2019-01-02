@@ -151,7 +151,7 @@ source .bashrc
 ```
 
 ## Citation 
-If you use any of these algorithms from this repo please cite the article below
+If you use these algorithms please cite the article below
 
 [Pearson K. A., et al., 2019, AJ, 157, 21](http://iopscience.iop.org/article/10.3847/1538-3881/aaf1ae/meta)
 

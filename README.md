@@ -45,7 +45,7 @@ if __name__ == "__main__":
                         )
 
 
-    for k in myfit.data['LS']['freekeys']:
+    for k in myfit.data['freekeys']:
         print( '{}: {:.6f} +- {:.6f}'.format(k,myfit.data['NS']['parameters'][k],myfit.data['NS']['errors'][k]) )
 
     myfit.plot_results(show=True,t='NS')

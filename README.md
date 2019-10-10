@@ -47,7 +47,7 @@ if __name__ == "__main__":
                         bounds= mybounds,
                         )
 
-    for k in myfit.data['LS']['freekeys']:
+    for k in myfit.data['freekeys']:
         print( '{}: {:.6f} +- {:.6f}'.format(k,myfit.data['LS']['parameters'][k],myfit.data['LS']['errors'][k]) )
 
     myfit.plot_results(show=True,phase=True)
@@ -118,7 +118,7 @@ source .bashrc
 
 
 ## Citation 
-If you use any of these algorithms from this repo please cite the article below
+If you use these algorithms please cite the article below
 
 [Pearson K. A., et al., 2019, AJ, 157, 21](http://iopscience.iop.org/article/10.3847/1538-3881/aaf1ae/meta)
 

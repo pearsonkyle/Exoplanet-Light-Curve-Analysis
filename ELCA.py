@@ -203,6 +203,7 @@ class lc_fitter(object):
         self.data['LS']['parameters'] = fixeddict
         self.data['LS']['errors'] = errordict
         self.data['LS']['freekeys'] = freekeys
+        self.data['freekeys'] = freekeys
 
         # compute transit and airmass model separately
         keys = ['rp','ar','per','inc','u1','u2','ecc','ome','tm']

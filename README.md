@@ -9,7 +9,7 @@ A python 3 package for modeling exoplanet light curves. The transit function is 
 
 ![](figures/posterior_sample.png)
 
-The data points are color coded to the likelihood value. Contours are plotted for the 1 and 2 sigma level. The dotted lines show the 2 sigma level which encompasses ~95% of solutions.
+The data points are color coded to the likelihood value. Contours are plotted for the 1 and 2 sigma level. The dotted lines show the 2 sigma uncertainty which encompasses ~95% of solutions.
 
 ## Running the package
 ```python

@@ -1,1 +1,0 @@
-gcc -Ofast -shared -o lib_transit.so -fPIC MandelTransits.c

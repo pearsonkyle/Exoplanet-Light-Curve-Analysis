@@ -4,62 +4,6 @@ import matplotlib.pyplot as plt
 import dynesty
 from dynesty import plotting as dyplot
 
-def time2z(time, ipct, tknot, sma, orbperiod, ecc, tperi=None, epsilon=1e-5):
-    '''
-    G. ROUDIER: Time samples in [Days] to separation in [R*]
-    '''
-    if tperi is not None:
-        ft0 = (tperi - tknot) % orbperiod
-        ft0 /= orbperiod
-        if ft0 > 0.5: ft0 += -1e0
-        M0 = 2e0*np.pi*ft0
-        E0 = solveme(M0, ecc, epsilon)
-        realf = np.sqrt(1e0 - ecc)*np.cos(E0/2e0)
-        imagf = np.sqrt(1e0 + ecc)*np.sin(E0/2e0)
-        w = np.angle(np.complex(realf, imagf))
-        if abs(ft0) < epsilon:
-            w = np.pi/2e0
-            tperi = tknot
-            pass
-        pass
-    else:
-        w = np.pi/2e0
-        tperi = tknot
-        pass
-    ft = (time - tperi) % orbperiod
-    ft /= orbperiod
-    sft = np.copy(ft)
-    sft[(sft > 0.5)] += -1e0
-    M = 2e0*np.pi*ft
-    E = solveme(M, ecc, epsilon)
-    realf = np.sqrt(1. - ecc)*np.cos(E/2e0)
-    imagf = np.sqrt(1. + ecc)*np.sin(E/2e0)
-    f = []
-    for r, i in zip(realf, imagf):
-        cn = np.complex(r, i)
-        f.append(2e0*np.angle(cn))
-        pass
-    f = np.array(f)
-    r = sma*(1e0 - ecc**2)/(1e0 + ecc*np.cos(f))
-    z = r*np.sqrt(1e0**2 - (np.sin(w+f)**2)*(np.sin(ipct*np.pi/180e0))**2)
-    z[sft < 0] *= -1e0
-    return z, sft
-
-def solveme(M, e, eps):
-    '''
-    G. ROUDIER: Newton Raphson solver for true anomaly
-    M is a numpy array
-    '''
-    E = np.copy(M)
-    for i in np.arange(M.shape[0]):
-        while abs(E[i] - e*np.sin(E[i]) - M[i]) > eps:
-            num = E[i] - e*np.sin(E[i]) - M[i]
-            den = 1. - e*np.cos(E[i])
-            E[i] = E[i] - num/den
-            pass
-        pass
-    return E
-
 # Computes Hasting's polynomial approximation for the complete
 # elliptic integral of the first (ek) and second (kk) kind
 def ellke(k):
@@ -318,6 +262,62 @@ def occultquad(z,u1,u2,p0):
         mu0=1.-lambdae
         return [muo1,mu0]
 
+def time2z(time, ipct, tknot, sma, orbperiod, ecc, tperi=None, epsilon=1e-5):
+    '''
+    G. ROUDIER: Time samples in [Days] to separation in [R*]
+    '''
+    if tperi is not None:
+        ft0 = (tperi - tknot) % orbperiod
+        ft0 /= orbperiod
+        if ft0 > 0.5: ft0 += -1e0
+        M0 = 2e0*np.pi*ft0
+        E0 = solveme(M0, ecc, epsilon)
+        realf = np.sqrt(1e0 - ecc)*np.cos(E0/2e0)
+        imagf = np.sqrt(1e0 + ecc)*np.sin(E0/2e0)
+        w = np.angle(np.complex(realf, imagf))
+        if abs(ft0) < epsilon:
+            w = np.pi/2e0
+            tperi = tknot
+            pass
+        pass
+    else:
+        w = np.pi/2e0
+        tperi = tknot
+        pass
+    ft = (time - tperi) % orbperiod
+    ft /= orbperiod
+    sft = np.copy(ft)
+    sft[(sft > 0.5)] += -1e0
+    M = 2e0*np.pi*ft
+    E = solveme(M, ecc, epsilon)
+    realf = np.sqrt(1. - ecc)*np.cos(E/2e0)
+    imagf = np.sqrt(1. + ecc)*np.sin(E/2e0)
+    f = []
+    for r, i in zip(realf, imagf):
+        cn = np.complex(r, i)
+        f.append(2e0*np.angle(cn))
+        pass
+    f = np.array(f)
+    r = sma*(1e0 - ecc**2)/(1e0 + ecc*np.cos(f))
+    z = r*np.sqrt(1e0**2 - (np.sin(w+f)**2)*(np.sin(ipct*np.pi/180e0))**2)
+    z[sft < 0] *= -1e0
+    return z, sft
+
+def solveme(M, e, eps):
+    '''
+    G. ROUDIER: Newton Raphson solver for true anomaly
+    M is a numpy array
+    '''
+    E = np.copy(M)
+    for i in np.arange(M.shape[0]):
+        while abs(E[i] - e*np.sin(E[i]) - M[i]) > eps:
+            num = E[i] - e*np.sin(E[i]) - M[i]
+            den = 1. - e*np.cos(E[i])
+            E[i] = E[i] - num/den
+            pass
+        pass
+    return E
+
 def transit(time, values):
     sep,phase = time2z(time, values['inc'], values['tmid'], values['ars'], values['per'], values['ecc'])
     model, _ = occultquad(abs(sep), values['u1'], values['u2'], values['rprs'])
@@ -400,10 +400,10 @@ class lc_fitter(object):
 if __name__ == "__main__":
 
     prior = { 
-        'rprs':0.02,        # Rp/Rs
-        'ars':14.07,        # a/Rs
+        'rprs':0.03,        # Rp/Rs
+        'ars':14.25,        # a/Rs
         'per':3.336817,     # Period [day]
-        'inc':88.75,        # Inclination [deg]
+        'inc':87.5,        # Inclination [deg]
         'u1': 0.3, 'u2': 0.01, # limb darkening (linear, quadratic)
         'ecc':0,            # Eccentricity
         'omega':0,          # Arg of periastron
@@ -411,12 +411,13 @@ if __name__ == "__main__":
     } 
 
     # GENERATE NOISY DATA
-    time = np.linspace(0.65,0.85,2000) # [day]
+    time = np.linspace(0.65,0.85,1000) # [day]
     data = transit(time, prior) + np.random.normal(0, 2e-4, len(time))
     dataerr = np.random.normal(300e-6, 50e-6, len(time))
 
     #plt.plot(time,data,'ko')
     #plt.show()
+    #dude()
 
     mybounds = {
         'rprs':[0,0.1],

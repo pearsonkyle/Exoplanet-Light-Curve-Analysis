@@ -17,7 +17,7 @@ array_1d_double = np.ctypeslib.ndpointer(dtype=ctypes.c_double,ndim=1,flags=['C_
 
 # load library
 lib_trans = np.ctypeslib.load_library('lib_transit.so',
-    os.path.join(os.environ.get('ELCA_PATH'),'C_sharedobject')
+    os.path.join(os.path.dirname(os.path.realpath(__file__)),'C_sharedobject')
 )
 
 # load fn from library and define inputs

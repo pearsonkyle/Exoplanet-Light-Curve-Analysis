@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import dynesty
-from dynesty import plotting as dyplot
+from dynesty import plotting
 
 ########################################################
 # LOAD IN TRANSIT FUNCTION FROM C

@@ -8,7 +8,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import dynesty
-from dynesty import plotting as dyplot
 
 from scipy import spatial
 
@@ -353,7 +352,7 @@ def gaussian_weights(X, w=None, neighbors=50, feature_scale=1000):
 
 class lc_fitter(object):
 
-    def __init__(self, time, data, dataerr, prior, bounds, syspars, neighbors=25):
+    def __init__(self, time, data, dataerr, prior, bounds, syspars, neighbors=50):
         self.time = time
         self.data = data
         self.dataerr = dataerr
@@ -376,7 +375,7 @@ class lc_fitter(object):
             detrended = self.data/lightcurve
             wf = weightedflux(detrended, self.gw, self.nearest)
             model = lightcurve*wf
-            return -0.5 * np.sum( ((self.data-model)/self.dataerr)**2 )
+            return -0.5 * np.nansum( ((self.data-model)/self.dataerr)**2 )
         
         def prior_transform(upars):
             # transform unit cube to prior volume
@@ -490,19 +489,19 @@ if __name__ == "__main__":
 
     pipeline_data = pickle.load(open('Spitzer/data.pkl','rb'))
 
-    time = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_time']
-    btime, data = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_flux'], dt=0.5/(60*24))
-    btime, dataerr = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_err'], dt=0.5/(60*24))
-    btime, wx = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_xcent'], dt=0.5/(60*24))
-    btime, wy = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_ycent'], dt=0.5/(60*24))
-    btime, npp = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_npp'], dt=0.5/(60*24))
-
     # time = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_time']
-    # data = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_flux']
-    # dataerr = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_err']
-    # wx = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_xcent']
-    # wy = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_ycent']
-    # npp = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_npp']
+    # btime, data = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_flux'], dt=0.5/(60*24))
+    # btime, dataerr = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_err'], dt=0.5/(60*24))
+    # btime, wx = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_xcent'], dt=0.5/(60*24))
+    # btime, wy = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_ycent'], dt=0.5/(60*24))
+    # btime, npp = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_npp'], dt=0.5/(60*24))
+
+    time = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_time']
+    data = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_flux']
+    dataerr = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_err']
+    wx = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_xcent']
+    wy = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_ycent']
+    npp = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_npp']
 
     syspars = np.array([wx,wy,npp]).T
 
@@ -512,7 +511,7 @@ if __name__ == "__main__":
         'ars':[7,9]
     }
 
-    #print(time.shape)
+    print(np.median(time))
 
     # 30 second cadence ~700 points
     # native resolution ~9500 datapoints, ~52 minutes

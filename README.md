@@ -2,6 +2,13 @@
 
 A python 3 package for modeling exoplanet light curves. The transit function is based on the analytic expressions of Mandel and Agol 2002. Estimate parameters and uncertainties using nested sampling. Various optimizations and detrending techniques are included in the files: `ELCA_*.py`
 
+![](figures/lightcurve.png)
+
+![](figures/posterior_sample.png)
+
+The data points are color coded to the likelihood value. Contours are plotted for the 1 and 2 sigma level. The dotted lines show the 2 sigma uncertainty which encompasses ~95% of solutions.
+
+
 ## Dependencies
 - Numpy, Matplotlib, [Dynesty](https://dynesty.readthedocs.io/en/latest/index.html)
 
@@ -13,11 +20,10 @@ A python 3 package for modeling exoplanet light curves. The transit function is 
     `export PATHONPATH=$PYTHONPATH:$HOME/path/to/Exoplanet-Light-Curve-Analysis`
     - For Windows set the environment variables from the control panel
 
-![](figures/lightcurve.png)
+3) OPTIONAL OPTIMIZATION - compile code in `C_sharedobject/` 
 
-![](figures/posterior_sample.png)
+    `gcc -Ofast -shared -o lib_transit.so -fPIC MandelTransit.c`
 
-The data points are color coded to the likelihood value. Contours are plotted for the 1 and 2 sigma level. The dotted lines show the 2 sigma uncertainty which encompasses ~95% of solutions.
 
 ## Running the package
 ```python

@@ -360,18 +360,28 @@ class lc_fitter(object):
         dsampler.run_nested()
         self.results = dsampler.results
 
-        # alloc data
+        # alloc data for best fit + error
         self.errors = {}
         self.parameters = {}
+        self.quantiles = {}
+        self.best = {}
         for k in self.prior:
             self.parameters[k] = self.prior[k]
-            
+
+        bi = np.argmax(self.results.logwt)
+
         # errors + final values
-        self.weights = np.exp(self.results['logwt'] - self.results['logz'][-1])
+        mean, cov = dynesty.utils.mean_and_cov(self.results.samples, self.results.logwt)
+        weights = np.exp(self.results.logwt - self.results.logz[-1])
         for i in range(len(freekeys)):
-            lo,me,up = dynesty.utils.quantile(self.results.samples[:,i], [0.025, 0.5, 0.975], weights=self.weights)
-            self.errors[freekeys[i]] = [lo-me,up-me]
-            self.parameters[freekeys[i]] = me
+            self.errors[freekeys[i]] = cov[i,i]**0.5
+            self.parameters[freekeys[i]] = mean[i]
+            
+            # sample with best chi^2
+            self.best[freekeys[i]] = self.results.samples[bi,i]
+
+            # finds median and +- 2sigma, will vary from mode if non-gaussian
+            self.quantiles[freekeys[i]] = dynesty.utils.quantile(self.results.samples[:,i], [0.025, 0.5, 0.975], weights=weights)
         
         # final model
         self.model = transit(self.time, self.parameters)

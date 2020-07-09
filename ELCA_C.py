@@ -86,18 +86,28 @@ class lc_fitter(object):
         dsampler.run_nested()
         self.results = dsampler.results
 
-        # alloc data
+        # alloc data for best fit + error
         self.errors = {}
         self.parameters = {}
+        self.quantiles = {}
+        self.best = {}
         for k in self.prior:
             self.parameters[k] = self.prior[k]
-            
+
+        bi = np.argmax(self.results.logwt)
+
         # errors + final values
-        self.weights = np.exp(self.results['logwt'] - self.results['logz'][-1])
+        mean, cov = dynesty.utils.mean_and_cov(self.results.samples, self.results.logwt)
+        weights = np.exp(self.results.logwt - self.results.logz[-1])
         for i in range(len(freekeys)):
-            lo,me,up = dynesty.utils.quantile(self.results.samples[:,i], [0.025, 0.5, 0.975], weights=self.weights)
-            self.errors[freekeys[i]] = [lo-me,up-me]
-            self.parameters[freekeys[i]] = me
+            self.errors[freekeys[i]] = cov[i,i]**0.5
+            self.parameters[freekeys[i]] = mean[i]
+
+            # sample with best chi^2
+            self.best[freekeys[i]] = self.results.samples[bi,i]
+
+            # finds median and +- 2sigma, will vary from mode if non-gaussian
+            self.quantiles[freekeys[i]] = dynesty.utils.quantile(self.results.samples[:,i], [0.025, 0.5, 0.975], weights=weights)
         
         # final model
         self.model = transit(self.time, self.parameters)
@@ -110,7 +120,7 @@ class lc_fitter(object):
         ax_res = plt.subplot2grid( (4,5), (3,0), colspan=5, rowspan=1 )
         axs = [ax_lc, ax_res]
 
-        axs[0].errorbar(self.time, self.data, yerr=self.dataerr, ls='none', marker='o', color='black', zorder=1)
+        axs[0].errorbar(self.time, self.data, yerr=self.dataerr, ls='none', marker='o', color='black', zorder=1, alpha=0.5)
         axs[0].plot(self.time, self.model, 'r-', zorder=2)
         axs[0].set_xlabel("Time [day]")
         axs[0].set_ylabel("Relative Flux")
@@ -126,7 +136,7 @@ class lc_fitter(object):
 if __name__ == "__main__":
 
     prior = { 
-        'rprs':0.03,        # Rp/Rs
+        'rprs':0.01,        # Rp/Rs
         'ars':14.25,        # a/Rs
         'per':3.336817,     # Period [day]
         'inc':87.5,        # Inclination [deg]
@@ -137,7 +147,7 @@ if __name__ == "__main__":
     } 
 
     # GENERATE NOISY DATA
-    time = np.linspace(0.65,0.85,10000) # [day]
+    time = np.linspace(0.65,0.85,2000) # [day]
     data = transit(time, prior) + np.random.normal(0, 2e-4, len(time))
     dataerr = np.random.normal(300e-6, 50e-6, len(time))
 
@@ -146,9 +156,10 @@ if __name__ == "__main__":
     #dude()
 
     mybounds = {
-        'rprs':[0,0.1],
+        'rprs':[0,2*prior['rprs']],
         'tmid':[min(time),max(time)],
-        'ars':[13,15]
+        'ars':[13,15], 
+        #'inc':[87,88]
     }
 
     myfit = lc_fitter(time, data, dataerr, prior, mybounds)
@@ -159,7 +170,7 @@ if __name__ == "__main__":
     fig,axs = myfit.plot_bestfit()
 
     # triangle plot
-    fig,axs = dynesty.plotting.cornerplot(myfit.results, labels=['Rp/Rs','Tmid','a/Rs'], quantiles_2d=[0.4,0.85], smooth=0.015, show_titles=True,use_math_text=True, title_fmt='.2e',hist2d_kwargs={'alpha':1,'zorder':2,'fill_contours':False})
-    dynesty.plotting.cornerpoints(myfit.results, labels=['Rp/Rs','Tmid','a/Rs'], fig=[fig,axs[1:,:-1]],plot_kwargs={'alpha':0.1,'zorder':1,} )
+    fig,axs = dynesty.plotting.cornerplot(myfit.results, labels=list(myfit.bounds.keys()), quantiles_2d=[0.4,0.85], smooth=0.015, show_titles=True,use_math_text=True, title_fmt='.2e',hist2d_kwargs={'alpha':1,'zorder':2,'fill_contours':False})
+    dynesty.plotting.cornerpoints(myfit.results, labels=list(myfit.bounds.keys()), fig=[fig,axs[1:,:-1]],plot_kwargs={'alpha':0.1,'zorder':1,} )
     plt.tight_layout()
     plt.show()

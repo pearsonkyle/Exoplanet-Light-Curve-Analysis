@@ -97,8 +97,8 @@ class lc_fitter(object):
         bi = np.argmax(self.results.logwt)
 
         # errors + final values
-        mean, cov = dynesty.utils.mean_and_cov(self.results.samples, self.results.logwt)
-        weights = np.exp(self.results.logwt - self.results.logz[-1])
+        self.weights = np.exp(self.results.logwt - self.results.logz[-1])
+        mean, cov = dynesty.utils.mean_and_cov(self.results.samples, self.weights)
         for i in range(len(freekeys)):
             self.errors[freekeys[i]] = cov[i,i]**0.5
             self.parameters[freekeys[i]] = mean[i]
@@ -147,7 +147,7 @@ if __name__ == "__main__":
     } 
 
     # GENERATE NOISY DATA
-    time = np.linspace(0.65,0.85,2000) # [day]
+    time = np.linspace(0.65,0.85,500) # [day]
     data = transit(time, prior) + np.random.normal(0, 2e-4, len(time))
     dataerr = np.random.normal(300e-6, 50e-6, len(time))
 

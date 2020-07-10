@@ -398,16 +398,17 @@ class lc_fitter(object):
         self.best = {}
         for k in self.prior:
             self.parameters[k] = self.prior[k]
+            self.best[k] = self.prior[k]
 
         bi = np.argmax(self.results.logwt)
 
         # errors + final values
-        mean, cov = dynesty.utils.mean_and_cov(self.results.samples, self.results.logwt)
-        weights = np.exp(self.results.logwt - self.results.logz[-1])
+        self.weights = np.exp(self.results.logwt - self.results.logz[-1])
+        mean, cov = dynesty.utils.mean_and_cov(self.results.samples, self.weights)
         for i in range(len(freekeys)):
             self.errors[freekeys[i]] = cov[i,i]**0.5
             self.parameters[freekeys[i]] = mean[i]
-            
+
             # sample with best chi^2
             self.best[freekeys[i]] = self.results.samples[bi,i]
 

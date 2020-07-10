@@ -93,6 +93,7 @@ class lc_fitter(object):
         self.best = {}
         for k in self.prior:
             self.parameters[k] = self.prior[k]
+            self.best[k] = self.prior[k]
 
         bi = np.argmax(self.results.logwt)
 

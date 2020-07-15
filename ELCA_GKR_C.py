@@ -1,14 +1,20 @@
 # Uses Gaussian Kernel Regression to handle errors correlated to centroid position
 import os
+import copy
 import ctypes
 import numpy as np
 import matplotlib.pyplot as plt
 
 import dynesty
 from dynesty import plotting
+from dynesty.utils import resample_equal
 
+from scipy.ndimage import gaussian_filter as norm_kde
+from scipy.stats import gaussian_kde
 from scipy import spatial
 
+import requests
+import re
 ########################################################
 # LOAD IN TRANSIT FUNCTION FROM C
 
@@ -97,13 +103,12 @@ class lc_fitter(object):
             detrended = self.data/lightcurve
             wf = weightedflux(detrended, self.gw, self.nearest)
             model = lightcurve*wf
-            return -0.5 * np.sum( ((self.data-model)/self.dataerr)**2 )
+            return -0.5 * np.sum( ((self.data-model)**2/self.dataerr**2) )
         
         def prior_transform(upars):
             # transform unit cube to prior volume
             return (boundarray[:,0] + bounddiff*upars)
-        
-        # TODO try 
+
         dsampler = dynesty.DynamicNestedSampler(
             loglike, prior_transform,
             ndim=len(freekeys), bound='multi', sample='unif', 
@@ -115,28 +120,65 @@ class lc_fitter(object):
 
         # alloc data for best fit + error
         self.errors = {}
-        self.parameters = {}
         self.quantiles = {}
-        self.best = {}
-        for k in self.prior:
-            self.parameters[k] = self.prior[k]
-            self.best[k] = self.prior[k]
+        self.parameters = copy.deepcopy(self.prior)
 
-        bi = np.argmax(self.results.logwt)
+        tests = [copy.deepcopy(self.prior) for i in range(6)]
+
+        # Derive kernel density estimate for best fit
+        weights = np.exp(self.results.logwt - self.results.logz[-1])
+        samples = self.results['samples']
+        logvol = self.results['logvol']
+        wt_kde = gaussian_kde(resample_equal(-logvol, weights))  # KDE
+        logvol_grid = np.linspace(logvol[0], logvol[-1], 1000)  # resample
+        wt_grid = wt_kde.pdf(-logvol_grid)  # evaluate KDE PDF
+        self.weights = np.interp(-logvol, -logvol_grid, wt_grid)  # interpolate
 
         # errors + final values
-        self.weights = np.exp(self.results.logwt - self.results.logz[-1])
-        mean, cov = dynesty.utils.mean_and_cov(self.results.samples, self.weights)
+        mean, cov = dynesty.utils.mean_and_cov(self.results.samples, weights)
+        mean2, cov2 = dynesty.utils.mean_and_cov(self.results.samples, self.weights)
         for i in range(len(freekeys)):
             self.errors[freekeys[i]] = cov[i,i]**0.5
-            self.parameters[freekeys[i]] = mean[i]
+            tests[0][freekeys[i]] = mean[i]
+            tests[1][freekeys[i]] = mean2[i]
 
-            # sample with best chi^2
-            self.best[freekeys[i]] = self.results.samples[bi,i]
+            counts, bins = np.histogram(samples[:,i], bins=100, weights=weights)
+            mi = np.argmax(counts)
+            tests[5][freekeys[i]] = bins[mi] + 0.5*np.mean(np.diff(bins))
 
             # finds median and +- 2sigma, will vary from mode if non-gaussian
             self.quantiles[freekeys[i]] = dynesty.utils.quantile(self.results.samples[:,i], [0.025, 0.5, 0.975], weights=weights)
-        
+            tests[2][freekeys[i]] = self.quantiles[freekeys[i]][1]
+
+        # find minimum near weighted mean
+        mask = (samples[:,0] < self.parameters[freekeys[0]]+2*self.errors[freekeys[0]]) & (samples[:,0] > self.parameters[freekeys[0]]-2*self.errors[freekeys[0]])
+        bi = np.argmin(self.weights[mask])
+
+        for i in range(len(freekeys)):
+            tests[3][freekeys[i]] = samples[mask][bi,i]
+            tests[4][freekeys[i]] = np.average(samples[mask][:,i],weights=self.weights[mask],axis=0)
+
+        # find best fit
+        chis = []
+        res = []
+        for i in range(len(tests)):
+            lightcurve = transit(self.time, tests[i])
+            detrended = self.data / lightcurve
+            wf = weightedflux(detrended, self.gw, self.nearest)
+            model = lightcurve*wf
+            residuals = self.data - model
+            res.append(residuals)
+            btime, br = time_bin(self.time, residuals)
+            blc = transit(btime, tests[i])
+            mask = blc < 1
+            duration = btime[mask].max() - btime[mask].min()
+            tmask = ((btime - tests[i]['tmid']) < duration) & ((btime - tests[i]['tmid']) > -1*duration)
+            chis.append( np.mean(br[tmask]**2) )
+
+        mi = np.argmin(chis)
+        self.parameters = copy.deepcopy(tests[mi])
+        # plt.scatter(samples[mask,0], samples[mask,1], c=weights[mask]); plt.show()
+
         # best fit model
         self.transit = transit(self.time, self.parameters)
         detrended = self.data / self.transit
@@ -151,14 +193,17 @@ class lc_fitter(object):
         ax_lc = plt.subplot2grid( (4,5), (0,0), colspan=5,rowspan=3 )
         ax_res = plt.subplot2grid( (4,5), (3,0), colspan=5, rowspan=1 )
         axs = [ax_lc, ax_res]
-
+        bt, bf = time_bin(self.time, self.detrended)
         axs[0].errorbar(self.time, self.detrended, yerr=np.std(self.residuals)/np.median(self.data), ls='none', marker='.', color='black', zorder=1, alpha=0.5)
-        axs[0].plot(self.time, self.transit, 'r-', zorder=2)
+        axs[0].plot(bt,bf,'c.',alpha=0.5,zorder=2)
+        axs[0].plot(self.time, self.transit, 'r-', zorder=3)
         axs[0].set_xlabel("Time [day]")
         axs[0].set_ylabel("Relative Flux")
         axs[0].grid(True,ls='--')
 
         axs[1].plot(self.time, self.residuals/np.median(self.data)*1e6, 'k.', alpha=0.5)
+        bt, br = time_bin(self.time, self.residuals/np.median(self.data)*1e6)
+        axs[1].plot(bt,br,'c.',alpha=0.5,zorder=2)
         axs[1].set_xlabel("Time [day]")
         axs[1].set_ylabel("Residuals [ppm]")
         axs[1].grid(True,ls='--')
@@ -207,23 +252,24 @@ if __name__ == "__main__":
     au=1.496e11 # m 
 
     # Gaussian kernel regression to handle Spitzer systematics
-    priors = json.load(open('Spitzer/prior.json','r'))
+    priors = json.load(open('Spitzer/WASP-19_prior.json','r'))
     
-    # u1,u2 = get_ld(priors, band='Spit36') # (0.078093363, 0.18576002)
+    u1,u2 = get_ld(priors, band='Spit36') # (0.078093363, 0.18576002)
     # u1,u2 = get_ld(priors, band='Spit45') # (0.069588612, 0.14764559)
 
     prior = { 
         'rprs': priors['b']['rp']*rjup / (priors['R*']*rsun) ,
-        'ars': priors['b']['ars'],
+        'ars': priors['b']['sma']*au/(priors['R*']*rsun),
         'per': priors['b']['period'],
         'inc': priors['b']['inc'],
-        'u1': 0.078, 'u2': 0.1857, # limb darkening (linear, quadratic)
+        'u1': u1, 'u2': u2, # limb darkening (linear, quadratic)
         'ecc': priors['b']['ecc'],
-        'omega': priors['b']['omega'], 
+        'omega': priors['b'].get('omega',0), 
         'tmid':0.75 
     } 
 
-    pipeline_data = pickle.load(open('Spitzer/data.pkl','rb'))
+    #pipeline_data = pickle.load(open('Spitzer/WASP-19_data.pkl','rb'))
+    pipeline_data = pickle.load(open('Spitzer/WASP-19_data.pkl','rb'))
 
     # time = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_time']
     # btime, data = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_flux'], dt=0.5/(60*24))
@@ -232,19 +278,19 @@ if __name__ == "__main__":
     # btime, wy = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_ycent'], dt=0.5/(60*24))
     # btime, npp = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_npp'], dt=0.5/(60*24))
 
-    time = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_time']
-    data = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_flux']
-    dataerr = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_err']
-    wx = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_xcent']
-    wy = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_ycent']
-    npp = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_npp']
+    time = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_time']
+    data = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_flux']
+    dataerr = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_err']
+    wx = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_xcent']
+    wy = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_ycent']
+    npp = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_npp']
 
     syspars = np.array([wx,wy,npp]).T
 
     mybounds = {
-        'rprs':[0,0.2],
+        'rprs':[0,1.25*prior['rprs']],
         'tmid':[min(time),max(time)],
-        'ars':[7,9]
+        'ars':[prior['ars']*0.9,prior['ars']*1.1]
     }
 
     print(np.median(time))

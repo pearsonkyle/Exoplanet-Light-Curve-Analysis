@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -446,6 +447,18 @@ class lc_fitter(object):
 
         return f,axs
 
+def time_bin(time, flux, dt=1./(60*24)):
+    bins = int(np.floor((max(time) - min(time))/dt))
+    bflux = np.zeros(bins)
+    btime = np.zeros(bins)
+    for i in range(bins):
+        mask = (time >= (min(time)+i*dt)) & (time < (min(time)+(i+1)*dt))
+        if mask.sum() > 0:
+            bflux[i] = np.nanmean(flux[mask])
+            btime[i] = np.nanmean(time[mask])
+    zmask = (bflux==0) | (btime==0) | np.isnan(bflux) | np.isnan(btime)
+    return btime[~zmask], bflux[~zmask]
+
 if __name__ == "__main__":
 
     prior = { 
@@ -460,7 +473,7 @@ if __name__ == "__main__":
     } 
 
     # GENERATE NOISY DATA
-    time = np.linspace(0.65,0.85,10000) # [day]
+    time = np.linspace(0.65,0.85,200) # [day]
     data = transit(time, prior) + np.random.normal(0, 2e-4, len(time))
     dataerr = np.random.normal(300e-6, 50e-6, len(time))
 

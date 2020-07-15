@@ -98,12 +98,12 @@ class lc_fitter(object):
             # call C function
             keys = ['rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
             vals = [self.prior[k] for k in keys]
-            occultquadC( time, *vals, len(time), lightcurve )
+            occultquadC(time, *vals, len(time), lightcurve)
             
             detrended = self.data/lightcurve
             wf = weightedflux(detrended, self.gw, self.nearest)
             model = lightcurve*wf
-            return -0.5 * np.sum( ((self.data-model)**2/self.dataerr**2) )
+            return -0.5 * np.sum(((self.data-model)**2/self.dataerr**2))
         
         def prior_transform(upars):
             # transform unit cube to prior volume
@@ -173,7 +173,7 @@ class lc_fitter(object):
             mask = blc < 1
             duration = btime[mask].max() - btime[mask].min()
             tmask = ((btime - tests[i]['tmid']) < duration) & ((btime - tests[i]['tmid']) > -1*duration)
-            chis.append( np.mean(br[tmask]**2) )
+            chis.append(np.mean(br[tmask]**2))
 
         mi = np.argmin(chis)
         self.parameters = copy.deepcopy(tests[mi])
@@ -188,10 +188,10 @@ class lc_fitter(object):
         self.detrended = self.data/self.wf
 
     def plot_bestfit(self):
-        f = plt.figure( figsize=(12,7) )
-        #f.subplots_adjust(top=0.94,bottom=0.08,left=0.07,right=0.96)
-        ax_lc = plt.subplot2grid( (4,5), (0,0), colspan=5,rowspan=3 )
-        ax_res = plt.subplot2grid( (4,5), (3,0), colspan=5, rowspan=1 )
+        f = plt.figure(figsize=(12,7))
+        # f.subplots_adjust(top=0.94,bottom=0.08,left=0.07,right=0.96)
+        ax_lc = plt.subplot2grid((4,5), (0,0), colspan=5,rowspan=3)
+        ax_res = plt.subplot2grid((4,5), (3,0), colspan=5, rowspan=1)
         axs = [ax_lc, ax_res]
         bt, bf = time_bin(self.time, self.detrended)
         axs[0].errorbar(self.time, self.detrended, yerr=np.std(self.residuals)/np.median(self.data), ls='none', marker='.', color='black', zorder=1, alpha=0.5)

@@ -85,6 +85,7 @@ class lc_fitter(object):
         boundarray = np.array([self.bounds[k] for k in freekeys])
         bounddiff = np.diff(boundarray,1).reshape(-1)
 
+        # alloc arrays for C
         time = np.require(self.time,dtype=ctypes.c_double,requirements='C')
         lightcurve = np.zeros(len(self.time),dtype=ctypes.c_double)
         lightcurve = np.require(lightcurve,dtype=ctypes.c_double,requirements='C')

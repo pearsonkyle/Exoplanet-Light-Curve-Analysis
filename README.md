@@ -17,7 +17,8 @@ The data points are color coded to the likelihood value. Contours are plotted fo
 2) Add the directory path to your environment variable: `PYTHONPATH`. 
     - For Mac and Linux edit `$HOME/.bash_profile` and add 
     
-    `export PATHONPATH=$PYTHONPATH:$HOME/path/to/Exoplanet-Light-Curve-Analysis`
+    `export PYTHONPATH=$PYTHONPATH:$HOME/path/to/Exoplanet-Light-Curve-Analysis`
+    `source $HOME/.bash_profile`
     - For Windows set the environment variables from the control panel
 
     - Don't forget to do `source $HOME/.bash_profile` after editting 

@@ -1,8 +1,14 @@
+import copy
 import numpy as np
 import matplotlib.pyplot as plt
 
 import dynesty
 from dynesty import plotting as dyplot
+from dynesty.utils import resample_equal
+
+from scipy.ndimage import gaussian_filter as norm_kde
+from scipy.stats import gaussian_kde
+
 
 # Computes Hasting's polynomial approximation for the complete
 # elliptic integral of the first (ek) and second (kk) kind
@@ -360,19 +366,63 @@ class lc_fitter(object):
         dsampler.run_nested()
         self.results = dsampler.results
 
-        # alloc data
+        # alloc data for best fit + error
         self.errors = {}
-        self.parameters = {}
-        for k in self.prior:
-            self.parameters[k] = self.prior[k]
-            
+        self.quantiles = {}
+        self.parameters = copy.deepcopy(self.prior)
+
+        tests = [copy.deepcopy(self.prior) for i in range(6)]
+
+        # Derive kernel density estimate for best fit
+        weights = np.exp(self.results.logwt - self.results.logz[-1])
+        samples = self.results['samples']
+        logvol = self.results['logvol']
+        wt_kde = gaussian_kde(resample_equal(-logvol, weights))  # KDE
+        logvol_grid = np.linspace(logvol[0], logvol[-1], 1000)  # resample
+        wt_grid = wt_kde.pdf(-logvol_grid)  # evaluate KDE PDF
+        self.weights = np.interp(-logvol, -logvol_grid, wt_grid)  # interpolate
+
         # errors + final values
-        self.weights = np.exp(self.results['logwt'] - self.results['logz'][-1])
+        mean, cov = dynesty.utils.mean_and_cov(self.results.samples, weights)
+        mean2, cov2 = dynesty.utils.mean_and_cov(self.results.samples, self.weights)
         for i in range(len(freekeys)):
-            lo,me,up = dynesty.utils.quantile(self.results.samples[:,i], [0.025, 0.5, 0.975], weights=self.weights)
-            self.errors[freekeys[i]] = [lo-me,up-me]
-            self.parameters[freekeys[i]] = me
-        
+            self.errors[freekeys[i]] = cov[i,i]**0.5
+            tests[0][freekeys[i]] = mean[i]
+            tests[1][freekeys[i]] = mean2[i]
+
+            counts, bins = np.histogram(samples[:,i], bins=100, weights=weights)
+            mi = np.argmax(counts)
+            tests[5][freekeys[i]] = bins[mi] + 0.5*np.mean(np.diff(bins))
+
+            # finds median and +- 2sigma, will vary from mode if non-gaussian
+            self.quantiles[freekeys[i]] = dynesty.utils.quantile(self.results.samples[:,i], [0.025, 0.5, 0.975], weights=weights)
+            tests[2][freekeys[i]] = self.quantiles[freekeys[i]][1]
+
+        # find minimum near weighted mean
+        mask = (samples[:,0] < self.parameters[freekeys[0]]+2*self.errors[freekeys[0]]) & (samples[:,0] > self.parameters[freekeys[0]]-2*self.errors[freekeys[0]])
+        bi = np.argmin(self.weights[mask])
+
+        for i in range(len(freekeys)):
+            tests[3][freekeys[i]] = samples[mask][bi,i]
+            tests[4][freekeys[i]] = np.average(samples[mask][:,i],weights=self.weights[mask],axis=0)
+
+        # find best fit
+        chis = []
+        res = []
+        for i in range(len(tests)):
+            lightcurve = transit(self.time, tests[i])
+            residuals = self.data - lightcurve
+            res.append(residuals)
+            btime, br = time_bin(self.time, residuals)
+            blc = transit(btime, tests[i])
+            mask = blc < 1
+            duration = btime[mask].max() - btime[mask].min()
+            tmask = ((btime - tests[i]['tmid']) < duration) & ((btime - tests[i]['tmid']) > -1*duration)
+            chis.append( np.mean(br[tmask]**2) )
+
+        mi = np.argmin(chis)
+        self.parameters = copy.deepcopy(tests[mi])
+
         # final model
         self.model = transit(self.time, self.parameters)
         self.residuals = self.data - self.model
@@ -397,6 +447,18 @@ class lc_fitter(object):
 
         return f,axs
 
+def time_bin(time, flux, dt=1./(60*24)):
+    bins = int(np.floor((max(time) - min(time))/dt))
+    bflux = np.zeros(bins)
+    btime = np.zeros(bins)
+    for i in range(bins):
+        mask = (time >= (min(time)+i*dt)) & (time < (min(time)+(i+1)*dt))
+        if mask.sum() > 0:
+            bflux[i] = np.nanmean(flux[mask])
+            btime[i] = np.nanmean(time[mask])
+    zmask = (bflux==0) | (btime==0) | np.isnan(bflux) | np.isnan(btime)
+    return btime[~zmask], bflux[~zmask]
+
 if __name__ == "__main__":
 
     prior = { 
@@ -411,7 +473,7 @@ if __name__ == "__main__":
     } 
 
     # GENERATE NOISY DATA
-    time = np.linspace(0.65,0.85,10000) # [day]
+    time = np.linspace(0.65,0.85,200) # [day]
     data = transit(time, prior) + np.random.normal(0, 2e-4, len(time))
     dataerr = np.random.normal(300e-6, 50e-6, len(time))
 

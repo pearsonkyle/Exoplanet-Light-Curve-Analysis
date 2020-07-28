@@ -38,9 +38,10 @@ occultquadC.argtypes = [array_1d_double, ctypes.c_double, ctypes.c_double, \
 # no outputs, last *double input is saved over in C
 occultquadC.restype = None
 
+# phase curve
 phaseCurve = lib_trans.phasecurve
 phaseCurve.argtypes = [array_1d_double, array_1d_double, ctypes.c_double, ctypes.c_double, \
-                        ctypes.c_double, ctypes.c_double, ctypes.c_double, \
+                        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, \
                         ctypes.c_double, ctypes.c_double, ctypes.c_double, \
                         ctypes.c_double, ctypes.c_double, array_1d_double ]
 phaseCurve.restype = None  
@@ -48,12 +49,13 @@ phaseCurve.restype = None
 
 def phasecurve(t, values):
     time = np.require(t,dtype=ctypes.c_double,requirements='C')
-    model = np.zeros(len(t),dtype=ctypes.c_double)
-    model = np.require(model,dtype=ctypes.c_double,requirements='C')
-    keys = ['rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
+    model = np.require(np.zeros(len(t)),dtype=ctypes.c_double,requirements='C')
+    cvals = np.require(np.zeros(5),dtype=ctypes.c_double,requirements='C')
+
+    keys = ['erprs', 'rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
     vals = [values[k] for k in keys]
-    cvals = [values[k] for k in ['c0','c1','c2','c3','c4']]
-    phaseCurve( time, *cvals, *vals, len(time), model)
+    for i,k in enumerate(['c0','c1','c2','c3','c4']): cvals[i] = prior[k]
+    phaseCurve( time, cvals, *vals, len(time), model)
     return model
 
 def transit(t, values):
@@ -104,20 +106,20 @@ class lc_fitter(object):
 
         # alloc arrays for C
         time = np.require(self.time,dtype=ctypes.c_double,requirements='C')
-        lightcurve = np.zeros(len(self.time),dtype=ctypes.c_double)
-        lightcurve = np.require(lightcurve,dtype=ctypes.c_double,requirements='C')
+        lightcurve = np.require(np.zeros(len(self.time)),dtype=ctypes.c_double,requirements='C')
+        cvals = np.require(np.zeros(5),dtype=ctypes.c_double,requirements='C')
 
         def loglike(pars):
             # update free parameters
             for i in range(len(pars)):
                 self.prior[freekeys[i]] = pars[i]
-            # lightcurve = transit(self.time, self.prior)
 
             # call C function
-            keys = ['rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
+            keys = ['erprs', 'rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
             vals = [self.prior[k] for k in keys]
-            occultquadC(time, *vals, len(time), lightcurve)
-            
+            for i,k in enumerate(['c0','c1','c2','c3','c4']): cvals[i] = self.prior[k]
+            phaseCurve( self.time, cvals, *vals, len(self.time), lightcurve)
+
             detrended = self.data/lightcurve
             wf = weightedflux(detrended, self.gw, self.nearest)
             model = lightcurve*wf
@@ -280,43 +282,62 @@ if __name__ == "__main__":
     # u1,u2 = get_ld(priors, band='Spit45') # (0.069588612, 0.14764559)
 
     prior = { 
+        # transit 
         'rprs': priors['b']['rp']*rjup / (priors['R*']*rsun) ,
         'ars': priors['b']['sma']*au/(priors['R*']*rsun),
         'per': priors['b']['period'],
         'inc': priors['b']['inc'],
-        'u1': u1, 'u2': u2, # limb darkening (linear, quadratic)
-        'ecc': priors['b']['ecc'],
+        'tmid':0.25, 
+
+        # eclipse 
+        'erprs': 0.1*priors['b']['rp']*rjup / (priors['R*']*rsun),
         'omega': priors['b'].get('omega',0), 
-        'tmid':0.75 
+        'ecc': priors['b']['ecc'],
+
+        # limb darkening (linear, quadratic)
+        'u1': u1, 'u2': u2, 
+    
+        # phase curve amplitudes
+        'c0':0, 'c1':1e-4, 'c2':0, 'c3':0, 'c4':1e-5
     } 
 
     #pipeline_data = pickle.load(open('Spitzer/WASP-19_data.pkl','rb'))
     pipeline_data = pickle.load(open('Spitzer/WASP-19_data.pkl','rb'))
 
-    # time = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_time']
-    # btime, data = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_flux'], dt=0.5/(60*24))
-    # btime, dataerr = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_err'], dt=0.5/(60*24))
-    # btime, wx = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_xcent'], dt=0.5/(60*24))
-    # btime, wy = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_ycent'], dt=0.5/(60*24))
-    # btime, npp = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_npp'], dt=0.5/(60*24))
+    # time = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_time']
+    # data = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_flux']
+    # dataerr = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_err']
+    # wx = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_xcent']
+    # wy = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_ycent']
+    # npp = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_npp']
 
-    time = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_time']
-    data = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_flux']
-    dataerr = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_err']
-    wx = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_xcent']
-    wy = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_ycent']
-    npp = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_npp']
+    # syspars = np.array([wx,wy,npp]).T
 
-    syspars = np.array([wx,wy,npp]).T
+    time = np.linspace(0,1,100000)
+    data = phasecurve(time, prior)
+    dataerr = np.random.normal(0,1e-4,time.shape)
+
+    syspars = np.array([
+        np.random.normal(0,1e-4,time.shape),
+        np.random.normal(0,1e-4,time.shape),
+        np.random.normal(0,1e-4,time.shape)
+    ]).T
 
     mybounds = {
         'rprs':[0,1.25*prior['rprs']],
         'tmid':[min(time),max(time)],
-        'ars':[prior['ars']*0.9,prior['ars']*1.1]
-    }
+        'ars':[prior['ars']*0.9,prior['ars']*1.1],
+        
+        'erprs':[0,1.25*prior['rprs']],
+        'omega': [prior['omega']-25,prior['omega']+25],
+        'ecc': [0,0.05],
 
-    print(np.median(time))
-    print(time.shape)
+        'c0':[-1,1],
+        'c1':[-1,1],
+        'c2':[-1,1],
+        'c3':[-1,1],
+        'c4':[-1,1]
+    }
 
     # native resolution ~9500 datapoints, ~52 minutes
     # native resolution, C-optimized, ~4 minutes

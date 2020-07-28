@@ -22,8 +22,9 @@
 #define inv9 1./9
 
 void occultquad(double *t, double p, double ar, double P, double i, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F);
+void phasecurve(double *t, double *C, double erprs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F);
 
-// Elliptic integregral arproximations
+// Elliptic integral arproximations
 double E(double k);
 double PI(double n, double k);
 double K(double k);
@@ -283,6 +284,28 @@ double occultuni(double z, double w)
 	return muo1;
 }
 
+void phasecurve(double *t, double *C, double erprs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F)
+{
+	// transit 
+	occultquad(t, rprs, ars, P, inc, gamma1, gamma2, e, longPericenter, tmid, n, F);
+
+	// eclipse
+	// https://arxiv.org/pdf/1001.2010.pdf eq 33
+	double *eclipse = (double *) malloc(sizeof(double)*(int)n);
+	double tme = tmid + P*0.5*(1+e*(4*invPi)*cos(longPericenter*pi/180.));
+	occultquad(t, erprs, ars, P, inc, 0, 0, e, longPericenter+180, tme, n, eclipse);
+	// may not accurately capture duration for non-circular orbits
+
+	// phase curve
+	for (int i=0; i<(int)n; i++)
+	{
+		F[i] *= eclipse[i];
+		F[i] *= 1 + C[0] + C[1]*cos(2*pi*t[i]/P) + C[2]*sin(2*pi*t[i]/P) + C[3]*cos(4*pi*t[i]/P) + C[4]*sin(4*pi*t[i]/P);
+	}
+	free(eclipse);
+}
+
+
 void occultquad(double *t, double p, double ar, double P, double i, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F)
 {
 	double tmidoverP, tmidf;
@@ -310,38 +333,17 @@ void occultquad(double *t, double p, double ar, double P, double i, double gamma
 	double omega;
 	for (ii=0; ii<Npoints; ii++)
 	{
-		/*
-		; Input parameters (x) are:
-		; x(0) = P  (units of day)
-		; x(1) = inc = inclination angle (degrees)
-		; x(2) = p = R_p/R_* = radius of planet in units of radius of star
-		; x(3) = tmid = mid-point of transit
-		; x(4) = u1 = linear limb-darkening coefficient
-		; x(5) = u2 = quadratic limb-darkening coefficient
-		; x(6) = f0 = uneclipsed flux
-		; x(7) = a/R_* = semi-major axis divided by R_*
-		; x(8) = e = eccentricity
-		; x(9) = omega = longitude of pericentre
-		; x(10)= sine amplitude
-		; x(11)= slope of linear fit
-		; x(12)= intercept of linear fit
-		 */
 		ti = t[ii];
-		if (0 == 0)	{	// Use MATLAB version or Erics version. If true, Eric's version.
-			double f1,e1,tp, m, f, radius;
-			f1 = 1.50*pi-longPericenter*pi*inv180;
-			e1 = e;
+		double f1, e1,tp, m, f, radius;
+		f1 = 1.50*pi-longPericenter*pi*inv180;
+		e1 = e;
 
-			// looping error perhaps comes from somewhere in here
-			tp = tmid+P*sqrtee*0.5*invPi*(e1*sin(f1)/(1.0+e1*cos(f1))-2.0/sqrtee*atan( (sqrtee*tan(0.5*f1))/(1.0+e1) ));
-			m = 2.0*pi*invP*(ti-tp);
-			f = kepler_opt(m,epoverm,e1);
-			radius = ar*(1.0 - e1*e1)/(1.0 + e1*cos(f));
-			Z[ii] = radius*sqrt(1.0-(sin(i*pi*inv180)*sin(longPericenter*pi*inv180+f))*(sin(i*pi*inv180)*sin(longPericenter*pi*inv180+f))); //Eric Agol's code inspired
-		} 
-        else {
-			Z[ii] = ar*sqrt(sin(2*pi*invP*ti)*sin(2*pi*invP*ti) + (cos(pi*inv180*i)*cos(2*pi*invP*ti))*(cos(pi*inv180*i)*cos(2*pi*invP*ti))); // MATLAB VERSION
-		}
+		// looping error perhaps comes from somewhere in here
+		tp = tmid+P*sqrtee*0.5*invPi*(e1*sin(f1)/(1.0+e1*cos(f1))-2.0/sqrtee*atan( (sqrtee*tan(0.5*f1))/(1.0+e1) ));
+		m = 2.0*pi*invP*(ti-tp);
+		f = kepler_opt(m,epoverm,e1);
+		radius = ar*(1.0 - e1*e1)/(1.0 + e1*cos(f));
+		Z[ii] = radius*sqrt(1.0-(sin(i*pi*inv180)*sin(longPericenter*pi*inv180+f))*(sin(i*pi*inv180)*sin(longPericenter*pi*inv180+f))); //Eric Agol's code inspired		
 	}
 
 	omega=1.0-gamma1*inv3-gamma2/6.0;
@@ -353,10 +355,9 @@ void occultquad(double *t, double p, double ar, double P, double i, double gamma
 	invp = 1./p;
 	invar = 1./ar;
 
-
 	for (j=0;j<Npoints;j++)
 	{
-		z = Z[j];
+		z = fabs(Z[j]);
 		invz = 1./z;
 		z2 = z*z;
 	    a = (z-p)*(z-p);

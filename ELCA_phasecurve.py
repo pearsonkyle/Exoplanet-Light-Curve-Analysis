@@ -9,6 +9,7 @@ import dynesty
 from dynesty import plotting
 from dynesty.utils import resample_equal
 
+from scipy.optimize import least_squares
 from scipy.ndimage import gaussian_filter as norm_kde
 from scipy.stats import gaussian_kde
 from scipy import spatial
@@ -38,9 +39,10 @@ occultquadC.argtypes = [array_1d_double, ctypes.c_double, ctypes.c_double, \
 # no outputs, last *double input is saved over in C
 occultquadC.restype = None
 
+# phase curve
 phaseCurve = lib_trans.phasecurve
 phaseCurve.argtypes = [array_1d_double, array_1d_double, ctypes.c_double, ctypes.c_double, \
-                        ctypes.c_double, ctypes.c_double, ctypes.c_double, \
+                        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, \
                         ctypes.c_double, ctypes.c_double, ctypes.c_double, \
                         ctypes.c_double, ctypes.c_double, array_1d_double ]
 phaseCurve.restype = None  
@@ -48,12 +50,13 @@ phaseCurve.restype = None
 
 def phasecurve(t, values):
     time = np.require(t,dtype=ctypes.c_double,requirements='C')
-    model = np.zeros(len(t),dtype=ctypes.c_double)
-    model = np.require(model,dtype=ctypes.c_double,requirements='C')
-    keys = ['rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
+    model = np.require(np.zeros(len(t)),dtype=ctypes.c_double,requirements='C')
+    cvals = np.require(np.zeros(5),dtype=ctypes.c_double,requirements='C')
+
+    keys = ['erprs', 'rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
     vals = [values[k] for k in keys]
-    cvals = [values[k] for k in ['c0','c1','c2','c3','c4']]
-    phaseCurve( time, *cvals, *vals, len(time), model)
+    for i,k in enumerate(['c0','c1','c2','c3','c4']): cvals[i] = values[k]
+    phaseCurve( time, cvals, *vals, len(time), model)
     return model
 
 def transit(t, values):
@@ -87,7 +90,7 @@ def gaussian_weights(X, w=None, neighbors=50, feature_scale=1000):
 
 class lc_fitter(object):
 
-    def __init__(self, time, data, dataerr, prior, bounds, syspars, neighbors=50):
+    def __init__(self, time, data, dataerr, prior, bounds, syspars, neighbors=50, mode='ns'):
         self.time = time
         self.data = data
         self.dataerr = dataerr
@@ -95,7 +98,53 @@ class lc_fitter(object):
         self.bounds = bounds
         self.syspars = syspars
         self.gw, self.nearest = gaussian_weights(syspars, neighbors=neighbors)
-        self.fit_nested()
+        if mode == 'ns':
+            self.fit_nested()
+        else:
+            self.fit_lm()
+
+    def fit_lm(self):
+
+        freekeys = list(self.bounds.keys())
+        boundarray = np.array([self.bounds[k] for k in freekeys])
+
+        # alloc arrays for C
+        time = np.require(self.time,dtype=ctypes.c_double,requirements='C')
+        lightcurve = np.require(np.zeros(len(self.time)),dtype=ctypes.c_double,requirements='C')
+        cvals = np.require(np.zeros(5),dtype=ctypes.c_double,requirements='C')
+
+        def lc2min(pars):
+            for i in range(len(pars)):
+                self.prior[freekeys[i]] = pars[i]
+
+            # call C function
+            keys = ['erprs', 'rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
+            vals = [self.prior[k] for k in keys]
+            for i,k in enumerate(['c0','c1','c2','c3','c4']): cvals[i] = self.prior[k]
+            phaseCurve( self.time, cvals, *vals, len(self.time), lightcurve)
+
+            detrended = self.data/lightcurve
+            wf = weightedflux(detrended, self.gw, self.nearest)
+            model = lightcurve*wf
+            return ((self.data-model)/self.dataerr)**2 
+
+        res = least_squares(lc2min, x0=[self.prior[k] for k in freekeys], 
+            bounds=[boundarray[:,0], boundarray[:,1]], jac='3-point', loss='linear')
+        
+        self.parameters = copy.deepcopy(self.prior)
+        self.errors = {}
+
+        for i,k in enumerate(freekeys):
+            self.parameters[k] = res.x[i]
+            self.errors[k] = 0
+
+        # best fit model
+        self.transit = phasecurve(self.time, self.parameters)
+        detrended = self.data / self.transit
+        self.wf = weightedflux(detrended, self.gw, self.nearest)
+        self.model = self.transit*self.wf
+        self.residuals = self.data - self.model
+        self.detrended = self.data/self.wf
 
     def fit_nested(self):
         freekeys = list(self.bounds.keys())
@@ -104,20 +153,20 @@ class lc_fitter(object):
 
         # alloc arrays for C
         time = np.require(self.time,dtype=ctypes.c_double,requirements='C')
-        lightcurve = np.zeros(len(self.time),dtype=ctypes.c_double)
-        lightcurve = np.require(lightcurve,dtype=ctypes.c_double,requirements='C')
+        lightcurve = np.require(np.zeros(len(self.time)),dtype=ctypes.c_double,requirements='C')
+        cvals = np.require(np.zeros(5),dtype=ctypes.c_double,requirements='C')
 
         def loglike(pars):
             # update free parameters
             for i in range(len(pars)):
                 self.prior[freekeys[i]] = pars[i]
-            # lightcurve = transit(self.time, self.prior)
 
             # call C function
-            keys = ['rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
+            keys = ['erprs', 'rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
             vals = [self.prior[k] for k in keys]
-            occultquadC(time, *vals, len(time), lightcurve)
-            
+            for i,k in enumerate(['c0','c1','c2','c3','c4']): cvals[i] = self.prior[k]
+            phaseCurve( self.time, cvals, *vals, len(self.time), lightcurve)
+
             detrended = self.data/lightcurve
             wf = weightedflux(detrended, self.gw, self.nearest)
             model = lightcurve*wf
@@ -180,7 +229,8 @@ class lc_fitter(object):
         chis = []
         res = []
         for i in range(len(tests)):
-            lightcurve = transit(self.time, tests[i])
+            
+            lightcurve = phasecurve(self.time, tests[i])
             detrended = self.data / lightcurve
             wf = weightedflux(detrended, self.gw, self.nearest)
             model = lightcurve*wf
@@ -188,11 +238,8 @@ class lc_fitter(object):
             res.append(residuals)
             btime, br = time_bin(self.time, residuals)
             blc = transit(btime, tests[i])
-            mask = blc < 1
-            if mask.shape[0] == 0:
-                mask = np.ones(blc.shape,dtype=bool)
-            if mask.sum() == 0:
-                mask = np.ones(blc.shape,dtype=bool)
+            mask = np.ones(blc.shape,dtype=bool)
+            # TODO add more ephemesis on in transit fits
             duration = btime[mask].max() - btime[mask].min()
             tmask = ((btime - tests[i]['tmid']) < duration) & ((btime - tests[i]['tmid']) > -1*duration)
             chis.append(np.mean(br[tmask]**2))
@@ -202,7 +249,7 @@ class lc_fitter(object):
         # plt.scatter(samples[mask,0], samples[mask,1], c=weights[mask]); plt.show()
 
         # best fit model
-        self.transit = transit(self.time, self.parameters)
+        self.transit = phasecurve(self.time, self.parameters)
         detrended = self.data / self.transit
         self.wf = weightedflux(detrended, self.gw, self.nearest)
         self.model = self.transit*self.wf
@@ -280,43 +327,62 @@ if __name__ == "__main__":
     # u1,u2 = get_ld(priors, band='Spit45') # (0.069588612, 0.14764559)
 
     prior = { 
+        # transit 
         'rprs': priors['b']['rp']*rjup / (priors['R*']*rsun) ,
         'ars': priors['b']['sma']*au/(priors['R*']*rsun),
         'per': priors['b']['period'],
         'inc': priors['b']['inc'],
-        'u1': u1, 'u2': u2, # limb darkening (linear, quadratic)
-        'ecc': priors['b']['ecc'],
+        'tmid':0.25, 
+
+        # eclipse 
+        'erprs': 0.1*priors['b']['rp']*rjup / (priors['R*']*rsun),
         'omega': priors['b'].get('omega',0), 
-        'tmid':0.75 
+        'ecc': priors['b']['ecc'],
+
+        # limb darkening (linear, quadratic)
+        'u1': u1, 'u2': u2, 
+    
+        # phase curve amplitudes
+        'c0':0, 'c1':1e-4, 'c2':0, 'c3':0, 'c4':1e-5
     } 
 
     #pipeline_data = pickle.load(open('Spitzer/WASP-19_data.pkl','rb'))
     pipeline_data = pickle.load(open('Spitzer/WASP-19_data.pkl','rb'))
 
-    # time = pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_time']
-    # btime, data = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_flux'], dt=0.5/(60*24))
-    # btime, dataerr = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_err'], dt=0.5/(60*24))
-    # btime, wx = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_xcent'], dt=0.5/(60*24))
-    # btime, wy = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_ycent'], dt=0.5/(60*24))
-    # btime, npp = time_bin(time, pipeline_data['Spitzer-IRAC-IR-36-SUB']['b'][0]['aper_npp'], dt=0.5/(60*24))
+    # time = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_time']
+    # data = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_flux']
+    # dataerr = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_err']
+    # wx = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_xcent']
+    # wy = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_ycent']
+    # npp = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_npp']
 
-    time = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_time']
-    data = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_flux']
-    dataerr = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_err']
-    wx = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_xcent']
-    wy = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_ycent']
-    npp = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_npp']
+    # syspars = np.array([wx,wy,npp]).T
 
-    syspars = np.array([wx,wy,npp]).T
+    time = np.linspace(0,1,100000)
+    data = phasecurve(time, prior)
+    dataerr = np.random.normal(0,1e-4,time.shape)
+
+    syspars = np.array([
+        np.random.normal(0,1e-4,time.shape),
+        np.random.normal(0,1e-4,time.shape),
+        np.random.normal(0,1e-4,time.shape)
+    ]).T
 
     mybounds = {
         'rprs':[0,1.25*prior['rprs']],
         'tmid':[min(time),max(time)],
-        'ars':[prior['ars']*0.9,prior['ars']*1.1]
-    }
+        'ars':[prior['ars']*0.9,prior['ars']*1.1],
+        
+        'erprs':[0,1.25*prior['rprs']],
+        'omega': [prior['omega']-25,prior['omega']+25],
+        'ecc': [0,0.05],
 
-    print(np.median(time))
-    print(time.shape)
+        'c0':[-1,1],
+        'c1':[-1,1],
+        'c2':[-1,1],
+        'c3':[-1,1],
+        'c4':[-1,1]
+    }
 
     # native resolution ~9500 datapoints, ~52 minutes
     # native resolution, C-optimized, ~4 minutes

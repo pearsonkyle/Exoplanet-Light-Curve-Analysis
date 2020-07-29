@@ -104,7 +104,7 @@ class lc_fitter(object):
         else:
             self.fit_lm()
 
-    def compute_mask(self, nDuration = 3):
+    def compute_mask(self, nDuration = 3.5):
         # compute transit duration mask around transit/eclipse
         w = self.prior.get('omega',0)
         tme = self.prior['tmid']+ self.prior['per']*0.5 * (1 + self.prior['ecc']*(4./np.pi)*np.cos(np.deg2rad(w)))

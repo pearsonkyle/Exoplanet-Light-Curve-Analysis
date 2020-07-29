@@ -156,6 +156,9 @@ class lc_fitter(object):
         lightcurve = np.require(np.zeros(len(self.time)),dtype=ctypes.c_double,requirements='C')
         cvals = np.require(np.zeros(5),dtype=ctypes.c_double,requirements='C')
 
+        # TODO CREATE mask for shortening computations
+        # compute transit duration
+
         def loglike(pars):
             # update free parameters
             for i in range(len(pars)):

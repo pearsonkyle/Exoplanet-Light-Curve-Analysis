@@ -97,11 +97,29 @@ class lc_fitter(object):
         self.prior = prior
         self.bounds = bounds
         self.syspars = syspars
-        self.gw, self.nearest = gaussian_weights(syspars, neighbors=neighbors)
+        self.neighbors = neighbors
+        
         if mode == 'ns':
             self.fit_nested()
         else:
             self.fit_lm()
+
+    def compute_mask(self, nDuration = 2.5):
+        # compute transit duration mask around transit/eclipse
+        w = self.prior.get('omega',0)
+        tme = self.prior['tmid']+ self.prior['per']*0.5 * (1 + self.prior['ecc']*(4./np.pi)*np.cos(np.deg2rad(w)))
+        tm = self.prior['tmid']
+
+        period = self.prior['per']
+        offset = 0.25
+        tphase = (self.time - tm + offset*period)/period % 1
+        ephase = (self.time - tme + offset*period)/period % 1
+        pdur = 2*np.arctan(1./self.prior['ars']) / (2*np.pi)
+         # padding on either side of transit/eclipse
+        tmask = (tphase > (offset-nDuration*pdur)) & (tphase < (offset+nDuration*pdur) )
+        emask = (ephase > (offset-nDuration*pdur)) & (ephase < (offset+nDuration*pdur) )
+        mask = tmask | emask
+        return mask
 
     def fit_lm(self):
 
@@ -112,6 +130,9 @@ class lc_fitter(object):
         time = np.require(self.time,dtype=ctypes.c_double,requirements='C')
         lightcurve = np.require(np.zeros(len(self.time)),dtype=ctypes.c_double,requirements='C')
         cvals = np.require(np.zeros(5),dtype=ctypes.c_double,requirements='C')
+
+        # gaussian weights for decorrelation
+        self.gw, self.nearest = gaussian_weights(self.syspars, neighbors=self.neighbors)
 
         def lc2min(pars):
             for i in range(len(pars)):
@@ -150,10 +171,14 @@ class lc_fitter(object):
         freekeys = list(self.bounds.keys())
         boundarray = np.array([self.bounds[k] for k in freekeys])
         bounddiff = np.diff(boundarray,1).reshape(-1)
+        
+        # trim data around predicted transit/eclipse time
+        mask = self.compute_mask()
+        self.gw, self.nearest = gaussian_weights(self.syspars[mask], neighbors=self.neighbors)
 
         # alloc arrays for C
-        time = np.require(self.time,dtype=ctypes.c_double,requirements='C')
-        lightcurve = np.require(np.zeros(len(self.time)),dtype=ctypes.c_double,requirements='C')
+        time = np.require(self.time[mask],dtype=ctypes.c_double,requirements='C')
+        lightcurve = np.require(np.zeros(len(time)),dtype=ctypes.c_double,requirements='C')
         cvals = np.require(np.zeros(5),dtype=ctypes.c_double,requirements='C')
 
         def loglike(pars):
@@ -165,12 +190,12 @@ class lc_fitter(object):
             keys = ['erprs', 'rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
             vals = [self.prior[k] for k in keys]
             for i,k in enumerate(['c0','c1','c2','c3','c4']): cvals[i] = self.prior[k]
-            phaseCurve( self.time, cvals, *vals, len(self.time), lightcurve)
+            phaseCurve(time, cvals, *vals, len(time), lightcurve)
 
-            detrended = self.data/lightcurve
+            detrended = self.data[mask]/lightcurve
             wf = weightedflux(detrended, self.gw, self.nearest)
             model = lightcurve*wf
-            return -0.5 * np.sum(((self.data-model)**2/self.dataerr**2))
+            return -0.5 * np.sum(((self.data[mask]-model)**2/self.dataerr[mask]**2))
         
         def prior_transform(upars):
             # transform unit cube to prior volume
@@ -191,6 +216,8 @@ class lc_fitter(object):
         self.parameters = copy.deepcopy(self.prior)
 
         tests = [copy.deepcopy(self.prior) for i in range(6)]
+
+        self.gw, self.nearest = gaussian_weights(self.syspars, neighbors=self.neighbors)
 
         # Derive kernel density estimate for best fit
         weights = np.exp(self.results.logwt - self.results.logz[-1])

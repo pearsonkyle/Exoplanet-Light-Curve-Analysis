@@ -9,6 +9,7 @@ import dynesty
 from dynesty import plotting
 from dynesty.utils import resample_equal
 
+from scipy.optimize import least_squares
 from scipy.ndimage import gaussian_filter as norm_kde
 from scipy.stats import gaussian_kde
 from scipy import spatial
@@ -54,7 +55,7 @@ def phasecurve(t, values):
 
     keys = ['erprs', 'rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
     vals = [values[k] for k in keys]
-    for i,k in enumerate(['c0','c1','c2','c3','c4']): cvals[i] = prior[k]
+    for i,k in enumerate(['c0','c1','c2','c3','c4']): cvals[i] = values[k]
     phaseCurve( time, cvals, *vals, len(time), model)
     return model
 
@@ -89,7 +90,7 @@ def gaussian_weights(X, w=None, neighbors=50, feature_scale=1000):
 
 class lc_fitter(object):
 
-    def __init__(self, time, data, dataerr, prior, bounds, syspars, neighbors=50):
+    def __init__(self, time, data, dataerr, prior, bounds, syspars, neighbors=50, mode='ns'):
         self.time = time
         self.data = data
         self.dataerr = dataerr
@@ -97,7 +98,53 @@ class lc_fitter(object):
         self.bounds = bounds
         self.syspars = syspars
         self.gw, self.nearest = gaussian_weights(syspars, neighbors=neighbors)
-        self.fit_nested()
+        if mode == 'ns':
+            self.fit_nested()
+        else:
+            self.fit_lm()
+
+    def fit_lm(self):
+
+        freekeys = list(self.bounds.keys())
+        boundarray = np.array([self.bounds[k] for k in freekeys])
+
+        # alloc arrays for C
+        time = np.require(self.time,dtype=ctypes.c_double,requirements='C')
+        lightcurve = np.require(np.zeros(len(self.time)),dtype=ctypes.c_double,requirements='C')
+        cvals = np.require(np.zeros(5),dtype=ctypes.c_double,requirements='C')
+
+        def lc2min(pars):
+            for i in range(len(pars)):
+                self.prior[freekeys[i]] = pars[i]
+
+            # call C function
+            keys = ['erprs', 'rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
+            vals = [self.prior[k] for k in keys]
+            for i,k in enumerate(['c0','c1','c2','c3','c4']): cvals[i] = self.prior[k]
+            phaseCurve( self.time, cvals, *vals, len(self.time), lightcurve)
+
+            detrended = self.data/lightcurve
+            wf = weightedflux(detrended, self.gw, self.nearest)
+            model = lightcurve*wf
+            return ((self.data-model)/self.dataerr)**2 
+
+        res = least_squares(lc2min, x0=[self.prior[k] for k in freekeys], 
+            bounds=[boundarray[:,0], boundarray[:,1]], jac='3-point', loss='linear')
+        
+        self.parameters = copy.deepcopy(self.prior)
+        self.errors = {}
+
+        for i,k in enumerate(freekeys):
+            self.parameters[k] = res.x[i]
+            self.errors[k] = 0
+
+        # best fit model
+        self.transit = phasecurve(self.time, self.parameters)
+        detrended = self.data / self.transit
+        self.wf = weightedflux(detrended, self.gw, self.nearest)
+        self.model = self.transit*self.wf
+        self.residuals = self.data - self.model
+        self.detrended = self.data/self.wf
 
     def fit_nested(self):
         freekeys = list(self.bounds.keys())
@@ -182,7 +229,8 @@ class lc_fitter(object):
         chis = []
         res = []
         for i in range(len(tests)):
-            lightcurve = transit(self.time, tests[i])
+            
+            lightcurve = phasecurve(self.time, tests[i])
             detrended = self.data / lightcurve
             wf = weightedflux(detrended, self.gw, self.nearest)
             model = lightcurve*wf
@@ -190,11 +238,8 @@ class lc_fitter(object):
             res.append(residuals)
             btime, br = time_bin(self.time, residuals)
             blc = transit(btime, tests[i])
-            mask = blc < 1
-            if mask.shape[0] == 0:
-                mask = np.ones(blc.shape,dtype=bool)
-            if mask.sum() == 0:
-                mask = np.ones(blc.shape,dtype=bool)
+            mask = np.ones(blc.shape,dtype=bool)
+            # TODO add more ephemesis on in transit fits
             duration = btime[mask].max() - btime[mask].min()
             tmask = ((btime - tests[i]['tmid']) < duration) & ((btime - tests[i]['tmid']) > -1*duration)
             chis.append(np.mean(br[tmask]**2))
@@ -204,7 +249,7 @@ class lc_fitter(object):
         # plt.scatter(samples[mask,0], samples[mask,1], c=weights[mask]); plt.show()
 
         # best fit model
-        self.transit = transit(self.time, self.parameters)
+        self.transit = phasecurve(self.time, self.parameters)
         detrended = self.data / self.transit
         self.wf = weightedflux(detrended, self.gw, self.nearest)
         self.model = self.transit*self.wf

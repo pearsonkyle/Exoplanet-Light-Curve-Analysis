@@ -191,6 +191,7 @@ class lc_fitter(object):
         )
         dsampler.run_nested()
         self.results = dsampler.results
+        del(self.results['bound'])
 
         # alloc data for best fit + error
         self.errors = {}

@@ -264,26 +264,28 @@ class lc_fitter(object):
         self.residuals = self.data - self.model
         self.detrended = self.data/self.wf
 
-    def plot_bestfit(self):
+    def plot_bestfit(self, bin_dt=10./(60*24)):
         f = plt.figure(figsize=(12,7))
         # f.subplots_adjust(top=0.94,bottom=0.08,left=0.07,right=0.96)
         ax_lc = plt.subplot2grid((4,5), (0,0), colspan=5,rowspan=3)
         ax_res = plt.subplot2grid((4,5), (3,0), colspan=5, rowspan=1)
         axs = [ax_lc, ax_res]
-        bt, bf = time_bin(self.time, self.detrended)
+        bt, bf = time_bin(self.time, self.detrended, bin_dt)
         axs[0].errorbar(self.time, self.detrended, yerr=np.std(self.residuals)/np.median(self.data), ls='none', marker='.', color='black', zorder=1, alpha=0.15)
-        axs[0].plot(bt,bf,'c.',alpha=0.5,zorder=2)
+        axs[0].plot(bt,bf,'co',alpha=0.5,zorder=2)
         axs[0].plot(self.time, self.transit, 'r-', zorder=3)
         axs[0].set_xlabel("Time [day]")
         axs[0].set_ylabel("Relative Flux")
         axs[0].grid(True,ls='--')
+        axs[0].set_xlim([min(self.time), max(self.time)])
 
         axs[1].plot(self.time, self.residuals/np.median(self.data)*1e6, 'k.', alpha=0.15)
-        bt, br = time_bin(self.time, self.residuals/np.median(self.data)*1e6)
+        bt, br = time_bin(self.time, self.residuals/np.median(self.data)*1e6, bin_dt)
         axs[1].plot(bt,br,'c.',alpha=0.5,zorder=2)
         axs[1].set_xlabel("Time [day]")
         axs[1].set_ylabel("Residuals [ppm]")
         axs[1].grid(True,ls='--')
+        axs[1].set_xlim([min(self.time), max(self.time)])
         plt.tight_layout()
 
         return f,axs

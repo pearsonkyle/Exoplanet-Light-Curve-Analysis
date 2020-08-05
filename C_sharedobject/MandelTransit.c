@@ -20,6 +20,10 @@
 #define invPi 1./3.1415926535897931160
 #define inv3 1./3
 #define inv9 1./9
+#define max(a,b) \
+   ({ __typeof__ (a) _a = (a); \
+       __typeof__ (b) _b = (b); \
+     _a > _b ? _a : _b; })
 
 void occultquad(double *t, double p, double ar, double P, double i, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F);
 void phasecurve(double *t, double *C, double erprs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F);
@@ -284,6 +288,7 @@ double occultuni(double z, double w)
 	return muo1;
 }
 
+
 void phasecurve(double *t, double *C, double erprs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F)
 {
 	// transit 
@@ -294,13 +299,27 @@ void phasecurve(double *t, double *C, double erprs, double rprs, double ars, dou
 	double *eclipse = (double *) malloc(sizeof(double)*(int)n);
 	double tme = tmid + P*0.5*(1+e*(4*invPi)*cos(longPericenter*pi/180.));
 	occultquad(t, erprs, ars, P, inc, 0, 0, e, longPericenter+180, tme, n, eclipse);
-	// may not accurately capture duration for non-circular orbits
+
+	// offset so that mid-eclipse is 1
+	C[0] = -1*((C[1]*cos(2*pi*tme/P) + C[2]*sin(2*pi*tme/P) + C[3]*cos(4*pi*tme/P) + C[4]*sin(4*pi*tme/P))-1*erprs*erprs);
 
 	// phase curve
 	for (int i=0; i<(int)n; i++)
 	{
+		F[i] *= F[i] * (1 + C[0] + C[1]*cos(2*pi*t[i]/P) + C[2]*sin(2*pi*t[i]/P) + C[3]*cos(4*pi*t[i]/P) + C[4]*sin(4*pi*t[i]/P));
 		F[i] *= eclipse[i];
-		F[i] *= 1 + C[0] + C[1]*cos(2*pi*t[i]/P) + C[2]*sin(2*pi*t[i]/P) + C[3]*cos(4*pi*t[i]/P) + C[4]*sin(4*pi*t[i]/P);
+
+		// adjust ingress to mid-eclipse
+		if (floor(eclipse[i]+erprs*erprs-1e-6)==0)
+		{
+			F[i] = 1;
+		}
+	
+		// adjust mid-eclipse to egress
+		if (floor(eclipse[i])==0)
+		{
+			F[i] = max(F[i],1);
+		}
 	}
 	free(eclipse);
 }

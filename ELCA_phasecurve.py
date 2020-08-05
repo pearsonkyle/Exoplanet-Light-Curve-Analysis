@@ -353,7 +353,7 @@ if __name__ == "__main__":
         'u1': u1, 'u2': u2, 
     
         # phase curve amplitudes
-        'c0':0, 'c1':1e-4, 'c2':0, 'c3':0, 'c4':1e-5
+        'c0':0, 'c1':1e-4, 'c2':-0.0005, 'c3':0., 'c4':1e-5
     } 
 
     #pipeline_data = pickle.load(open('Spitzer/WASP-19_data.pkl','rb'))
@@ -371,6 +371,9 @@ if __name__ == "__main__":
     time = np.linspace(0,1,100000)
     data = phasecurve(time, prior)
     dataerr = np.random.normal(0,1e-4,time.shape)
+    plt.plot(time,data,'k.')
+    plt.show()
+    dude()
 
     syspars = np.array([
         np.random.normal(0,1e-4,time.shape),

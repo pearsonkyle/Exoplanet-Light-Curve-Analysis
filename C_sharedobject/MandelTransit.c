@@ -303,8 +303,6 @@ void phasecurve(double *t, double *C, double erprs, double rprs, double ars, dou
 	// offset so that mid-eclipse is 1
 	C[0] = -1*((C[1]*cos(2*pi*tme/P) + C[2]*sin(2*pi*tme/P) + C[3]*cos(4*pi*tme/P) + C[4]*sin(4*pi*tme/P))-1*erprs*erprs);
 
-	printf("c0: %f",C[0]);
-
 	// phase curve
 	for (int i=0; i<(int)n; i++)
 	{

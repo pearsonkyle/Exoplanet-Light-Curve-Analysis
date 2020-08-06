@@ -366,6 +366,7 @@ if __name__ == "__main__":
     # wy = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_ycent']
     # npp = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_npp']
 
+    print((priors['b']['rp']*rjup / (priors['R*']*rsun))**2)
     # syspars = np.array([wx,wy,npp]).T
 
     time = np.linspace(0,1,100000)

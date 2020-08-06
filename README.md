@@ -2,7 +2,7 @@
 
 A python 3 package for modeling exoplanet light curves. The transit function is based on the analytic expressions of Mandel and Agol 2002. Estimate parameters and uncertainties using nested sampling. Various optimizations and detrending techniques are included in the files: `ELCA_*.py`
 
-![](figures/lightcurve.png)
+![](figures/lmfit.png)
 
 ![](figures/posterior_sample.png)
 

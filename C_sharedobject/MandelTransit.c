@@ -289,7 +289,7 @@ double occultuni(double z, double w)
 }
 
 
-void phasecurve(double *t, double *C, double erprs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F)
+void phasecurve(double *t, double *C, double fpfs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F)
 {
 	// transit 
 	occultquad(t, rprs, ars, P, inc, gamma1, gamma2, e, longPericenter, tmid, n, F);
@@ -298,19 +298,21 @@ void phasecurve(double *t, double *C, double erprs, double rprs, double ars, dou
 	// https://arxiv.org/pdf/1001.2010.pdf eq 33
 	double *eclipse = (double *) malloc(sizeof(double)*(int)n);
 	double tme = tmid + P*0.5*(1+e*(4*invPi)*cos(longPericenter*pi/180.));
-	occultquad(t, erprs, ars, P, inc, 0, 0, e, longPericenter+180, tme, n, eclipse);
+	occultquad(t, rprs, ars, P, inc, 0, 0, e, longPericenter, tme, n, eclipse);
+	//double edepth = fpfs*rprs*rprs;
 
 	// offset so that mid-eclipse is 1
-	C[0] = -1*((C[1]*cos(2*pi*tme/P) + C[2]*sin(2*pi*tme/P) + C[3]*cos(4*pi*tme/P) + C[4]*sin(4*pi*tme/P))-1*erprs*erprs);
+	C[0] = -1*((C[1]*cos(2*pi*tme/P) + C[2]*sin(2*pi*tme/P) + C[3]*cos(4*pi*tme/P) + C[4]*sin(4*pi*tme/P))-1*fpfs*rprs*rprs);
 
 	// phase curve
 	for (int i=0; i<(int)n; i++)
 	{
 		F[i] *= (1 + C[0] + C[1]*cos(2*pi*t[i]/P) + C[2]*sin(2*pi*t[i]/P) + C[3]*cos(4*pi*t[i]/P) + C[4]*sin(4*pi*t[i]/P));
-		F[i] *= eclipse[i];
+		F[i] *= (eclipse[i]-1)*fpfs + 1;
 
 		// adjust ingress to mid-eclipse
-		if (floor(eclipse[i]+erprs*erprs-1e-6)==0)
+		// (floor( (eclipse[i]-1)*fpfs + 1 + edepth-1e-8)==0) - equivalent just more calculations
+		if (floor(eclipse[i]+rprs*rprs-1e-8)==0)
 		{
 			F[i] = 1;
 		}

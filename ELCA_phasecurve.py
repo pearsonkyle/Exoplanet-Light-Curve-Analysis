@@ -52,8 +52,7 @@ def phasecurve(t, values):
     time = np.require(t,dtype=ctypes.c_double,requirements='C')
     model = np.require(np.zeros(len(t)),dtype=ctypes.c_double,requirements='C')
     cvals = np.require(np.zeros(5),dtype=ctypes.c_double,requirements='C')
-
-    keys = ['erprs', 'rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
+    keys = ['fpfs', 'rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
     vals = [values[k] for k in keys]
     for i,k in enumerate(['c0','c1','c2','c3','c4']): cvals[i] = values[k]
     phaseCurve( time, cvals, *vals, len(time), model)
@@ -90,7 +89,7 @@ def gaussian_weights(X, w=None, neighbors=50, feature_scale=1000):
 
 class lc_fitter(object):
 
-    def __init__(self, time, data, dataerr, prior, bounds, syspars, neighbors=50, mode='ns'):
+    def __init__(self, time, data, dataerr, prior, bounds, syspars, neighbors=100, mode='ns'):
         self.time = time
         self.data = data
         self.dataerr = dataerr
@@ -122,7 +121,7 @@ class lc_fitter(object):
                 self.prior[freekeys[i]] = pars[i]
 
             # call C function
-            keys = ['erprs', 'rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
+            keys = ['fpfs', 'rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
             vals = [self.prior[k] for k in keys]
             for i,k in enumerate(['c0','c1','c2','c3','c4']): cvals[i] = self.prior[k]
             phaseCurve( self.time, cvals, *vals, len(self.time), lightcurve)
@@ -169,7 +168,7 @@ class lc_fitter(object):
                 self.prior[freekeys[i]] = pars[i]
 
             # call C function
-            keys = ['erprs', 'rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
+            keys = ['fpfs', 'rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
             vals = [self.prior[k] for k in keys]
             for i,k in enumerate(['c0','c1','c2','c3','c4']): cvals[i] = self.prior[k]
             phaseCurve(time, cvals, *vals, len(time), lightcurve)
@@ -271,13 +270,14 @@ class lc_fitter(object):
         ax_res = plt.subplot2grid((4,5), (3,0), colspan=5, rowspan=1)
         axs = [ax_lc, ax_res]
         bt, bf = time_bin(self.time, self.detrended, bin_dt)
-        axs[0].errorbar(self.time, self.detrended, yerr=np.std(self.residuals)/np.median(self.data), ls='none', marker='.', color='black', zorder=1, alpha=0.15)
+        axs[0].errorbar(self.time, self.detrended, yerr=np.std(self.residuals)/np.median(self.data), ls='none', marker='.', color='black', zorder=1, alpha=0.05)
         axs[0].plot(bt,bf,'co',alpha=0.5,zorder=2)
         axs[0].plot(self.time, self.transit, 'r-', zorder=3)
         axs[0].set_xlabel("Time [day]")
         axs[0].set_ylabel("Relative Flux")
         axs[0].grid(True,ls='--')
         axs[0].set_xlim([min(self.time), max(self.time)])
+        axs[0].set_ylim([1-2*self.parameters['rprs']**2, 1+self.parameters['rprs']**2])
 
         axs[1].plot(self.time, self.residuals/np.median(self.data)*1e6, 'k.', alpha=0.15)
         bt, br = time_bin(self.time, self.residuals/np.median(self.data)*1e6, bin_dt)
@@ -287,7 +287,6 @@ class lc_fitter(object):
         axs[1].grid(True,ls='--')
         axs[1].set_xlim([min(self.time), max(self.time)])
         plt.tight_layout()
-
         return f,axs
 
 def time_bin(time, flux, dt=1./(60*24)):
@@ -331,10 +330,10 @@ if __name__ == "__main__":
     au=1.496e11 # m 
 
     # Gaussian kernel regression to handle Spitzer systematics
-    priors = json.load(open('Spitzer/WASP-19_prior.json','r'))
+    priors = json.load(open('Spitzer/WASP-103_prior.json','r'))
     
-    u1,u2 = get_ld(priors, band='Spit36') # (0.078093363, 0.18576002)
-    # u1,u2 = get_ld(priors, band='Spit45') # (0.069588612, 0.14764559)
+    #u1,u2 = get_ld(priors, band='Spit36') 
+    u1,u2 = get_ld(priors, band='Spit45') 
 
     prior = { 
         # transit 
@@ -345,7 +344,7 @@ if __name__ == "__main__":
         'tmid':0.25, 
 
         # eclipse 
-        'erprs': 0.1*priors['b']['rp']*rjup / (priors['R*']*rsun),
+        'fpfs': 0.1,
         'omega': priors['b'].get('omega',0), 
         'ecc': priors['b']['ecc'],
 
@@ -353,11 +352,12 @@ if __name__ == "__main__":
         'u1': u1, 'u2': u2, 
     
         # phase curve amplitudes
-        'c0':0, 'c1':1e-4, 'c2':-0.0005, 'c3':0., 'c4':1e-5
-    } 
+        'c0':0, 'c1':0, 'c2':-5e-4, 'c3':0., 'c4':0
+    }
 
+    print("edepth:",prior['rprs']**2 * prior['fpfs'])
     #pipeline_data = pickle.load(open('Spitzer/WASP-19_data.pkl','rb'))
-    pipeline_data = pickle.load(open('Spitzer/WASP-19_data.pkl','rb'))
+    pipeline_data = pickle.load(open('Spitzer/WASP-103_data.pkl','rb'))
 
     # time = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_time']
     # data = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_flux']
@@ -370,24 +370,16 @@ if __name__ == "__main__":
     # syspars = np.array([wx,wy,npp]).T
 
     time = np.linspace(0,1,100000)
-    data = phasecurve(time, prior)
-    dataerr = np.random.normal(0,1e-4,time.shape)
-    plt.plot(time,data,'k.')
+    plt.plot(time, phasecurve(time, prior),'k.', alpha=0.5)
+    plt.plot(time, transit(time,prior), 'r.',alpha=0.5)
     plt.show()
-    dude()
-
-    syspars = np.array([
-        np.random.normal(0,1e-4,time.shape),
-        np.random.normal(0,1e-4,time.shape),
-        np.random.normal(0,1e-4,time.shape)
-    ]).T
-
+    
     mybounds = {
         'rprs':[0,1.25*prior['rprs']],
         'tmid':[min(time),max(time)],
         'ars':[prior['ars']*0.9,prior['ars']*1.1],
         
-        'erprs':[0,1.25*prior['rprs']],
+        'fpfs':[0,0.5],
         'omega': [prior['omega']-25,prior['omega']+25],
         'ecc': [0,0.05],
 

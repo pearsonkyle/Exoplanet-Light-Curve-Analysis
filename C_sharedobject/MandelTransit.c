@@ -26,7 +26,7 @@
      _a > _b ? _a : _b; })
 
 void occultquad(double *t, double p, double ar, double P, double i, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F);
-void phasecurve(double *t, double *C, double erprs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F);
+void phasecurve(double *t, double *C, double fpfs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F);
 
 // Elliptic integral arproximations
 double E(double k);

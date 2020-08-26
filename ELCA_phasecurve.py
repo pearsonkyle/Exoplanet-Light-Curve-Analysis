@@ -45,7 +45,15 @@ phaseCurve.argtypes = [array_1d_double, array_1d_double, ctypes.c_double, ctypes
                         ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, \
                         ctypes.c_double, ctypes.c_double, ctypes.c_double, \
                         ctypes.c_double, ctypes.c_double, array_1d_double ]
-phaseCurve.restype = None  
+phaseCurve.restype = None
+
+# orbital radius
+orbitalRadius = lib_trans.orbitalradius
+orbitalRadius.argtypes = [array_1d_double, ctypes.c_double, ctypes.c_double, \
+                        ctypes.c_double, ctypes.c_double, ctypes.c_double, \
+                        ctypes.c_double, ctypes.c_double, ctypes.c_double, \
+                        ctypes.c_double, ctypes.c_double, array_1d_double ]
+orbitalRadius.restype = None
 ########################################################
 
 def phasecurve(t, values):
@@ -56,6 +64,15 @@ def phasecurve(t, values):
     vals = [values[k] for k in keys]
     for i,k in enumerate(['c0','c1','c2','c3','c4']): cvals[i] = values[k]
     phaseCurve( time, cvals, *vals, len(time), model)
+    return model
+
+def orbitalradius(t, values):
+    time = np.require(t,dtype=ctypes.c_double,requirements='C')
+    model = np.zeros(len(t),dtype=ctypes.c_double)
+    model = np.require(model,dtype=ctypes.c_double,requirements='C')
+    keys = ['rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
+    vals = [values[k] for k in keys]
+    orbitalRadius( time, *vals, len(time), model )
     return model
 
 def transit(t, values):
@@ -263,25 +280,29 @@ class lc_fitter(object):
         self.residuals = self.data - self.model
         self.detrended = self.data/self.wf
 
-    def plot_bestfit(self, bin_dt=10./(60*24)):
+    def plot_bestfit(self, bin_dt=10./(60*24), zoom=False):
         f = plt.figure(figsize=(12,7))
         # f.subplots_adjust(top=0.94,bottom=0.08,left=0.07,right=0.96)
         ax_lc = plt.subplot2grid((4,5), (0,0), colspan=5,rowspan=3)
         ax_res = plt.subplot2grid((4,5), (3,0), colspan=5, rowspan=1)
         axs = [ax_lc, ax_res]
         bt, bf = time_bin(self.time, self.detrended, bin_dt)
-        axs[0].errorbar(self.time, self.detrended, yerr=np.std(self.residuals)/np.median(self.data), ls='none', marker='.', color='black', zorder=1, alpha=0.05)
         axs[0].plot(bt,bf,'co',alpha=0.5,zorder=2)
         axs[0].plot(self.time, self.transit, 'r-', zorder=3)
         axs[0].set_xlabel("Time [day]")
         axs[0].set_ylabel("Relative Flux")
         axs[0].grid(True,ls='--')
         axs[0].set_xlim([min(self.time), max(self.time)])
-        axs[0].set_ylim([1-2*self.parameters['rprs']**2, 1+self.parameters['rprs']**2])
 
-        axs[1].plot(self.time, self.residuals/np.median(self.data)*1e6, 'k.', alpha=0.15)
+        if zoom:
+            axs[0].set_ylim([1-1.25*self.parameters['rprs']**2, 1+0.5*self.parameters['rprs']**2])
+        else:        
+            axs[0].errorbar(self.time, self.detrended, yerr=np.std(self.residuals)/np.median(self.data), ls='none', marker='.', color='black', zorder=1, alpha=0.01)
+
+        axs[1].plot(self.time, self.residuals/np.median(self.data)*1e6, 'k.', alpha=0.15, label=r'$\sigma$ = {:.0f} ppm'.format( np.std(self.residuals/np.median(self.data)*1e6)))
         bt, br = time_bin(self.time, self.residuals/np.median(self.data)*1e6, bin_dt)
-        axs[1].plot(bt,br,'c.',alpha=0.5,zorder=2)
+        axs[1].plot(bt,br,'c.',alpha=0.5,zorder=2,label=r'$\sigma$ = {:.0f} ppm'.format( np.std(br)))
+        axs[1].legend(loc='best')
         axs[1].set_xlabel("Time [day]")
         axs[1].set_ylabel("Residuals [ppm]")
         axs[1].grid(True,ls='--')
@@ -344,7 +365,7 @@ if __name__ == "__main__":
         'tmid':0.25, 
 
         # eclipse 
-        'fpfs': 0.1,
+        'fpfs': 0.01,
         'omega': priors['b'].get('omega',0), 
         'ecc': priors['b']['ecc'],
 
@@ -372,7 +393,9 @@ if __name__ == "__main__":
     time = np.linspace(0,1,100000)
     plt.plot(time, phasecurve(time, prior),'k.', alpha=0.5)
     plt.plot(time, transit(time,prior), 'r.',alpha=0.5)
+    
     plt.show()
+    dude()
     
     mybounds = {
         'rprs':[0,1.25*prior['rprs']],

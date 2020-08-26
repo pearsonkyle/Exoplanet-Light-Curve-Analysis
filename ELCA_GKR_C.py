@@ -215,17 +215,19 @@ class lc_fitter(object):
         ax_lc = plt.subplot2grid((4,5), (0,0), colspan=5,rowspan=3)
         ax_res = plt.subplot2grid((4,5), (3,0), colspan=5, rowspan=1)
         axs = [ax_lc, ax_res]
-        bt, bf = time_bin(self.time, self.detrended)
+        bt, bf = time_bin(self.time, self.detrended,1./(24*60))
         axs[0].errorbar(self.time, self.detrended, yerr=np.std(self.residuals)/np.median(self.data), ls='none', marker='.', color='black', zorder=1, alpha=0.5)
         axs[0].plot(bt,bf,'c.',alpha=0.5,zorder=2)
         axs[0].plot(self.time, self.transit, 'r-', zorder=3)
         axs[0].set_xlabel("Time [day]")
         axs[0].set_ylabel("Relative Flux")
         axs[0].grid(True,ls='--')
+        
+        axs[1].plot(self.time, self.residuals/np.median(self.data)*1e6, 'k.', alpha=0.15, label=r'$\sigma$ = {:.0f} ppm'.format( np.std(self.residuals/np.median(self.data)*1e6)))
+        bt, br = time_bin(self.time, self.residuals/np.median(self.data)*1e6,1./(24*60))
+        axs[1].plot(bt,br,'c.',alpha=0.5,zorder=2,label=r'$\sigma$ = {:.0f} ppm'.format( np.std(br)))
 
-        axs[1].plot(self.time, self.residuals/np.median(self.data)*1e6, 'k.', alpha=0.5)
-        bt, br = time_bin(self.time, self.residuals/np.median(self.data)*1e6)
-        axs[1].plot(bt,br,'c.',alpha=0.5,zorder=2)
+        axs[1].legend(loc='best')
         axs[1].set_xlabel("Time [day]")
         axs[1].set_ylabel("Residuals [ppm]")
         axs[1].grid(True,ls='--')

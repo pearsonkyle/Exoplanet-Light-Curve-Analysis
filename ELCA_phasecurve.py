@@ -4,6 +4,7 @@ import copy
 import ctypes
 import numpy as np
 import matplotlib.pyplot as plt
+from functools import wraps
 
 import dynesty
 from dynesty import plotting
@@ -16,6 +17,7 @@ from scipy import spatial
 
 import requests
 import re
+
 ########################################################
 # LOAD IN TRANSIT FUNCTION FROM C
 
@@ -54,55 +56,60 @@ orbitalRadius.argtypes = [array_1d_double, ctypes.c_double, ctypes.c_double, \
                         ctypes.c_double, ctypes.c_double, ctypes.c_double, \
                         ctypes.c_double, ctypes.c_double, array_1d_double ]
 orbitalRadius.restype = None
+
+# phase curve without eclipse
+brightnessCurve = lib_trans.brightness
+brightnessCurve.argtypes = [array_1d_double, array_1d_double, ctypes.c_double, ctypes.c_double, \
+                        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, \
+                        ctypes.c_double, ctypes.c_double, ctypes.c_double, \
+                        ctypes.c_double, ctypes.c_double, array_1d_double ]
+brightnessCurve.restype = None
+
+# cast arrays into C compatible format with pythonic magic
+def format_args(f):    
+    @wraps(f)
+    def wrapper(*args,**kwargs):
+        if len(args) == 2:
+            t = args[0]
+            values = args[1]
+        data = {}
+        data['time'] = np.require(t,dtype=ctypes.c_double,requirements='C')
+        data['model'] = np.require(np.ones(len(t)),dtype=ctypes.c_double,requirements='C')
+        data['cvals'] = np.require(np.zeros(5),dtype=ctypes.c_double,requirements='C')
+        if 'transit' in f.__name__ or 'orbit' in f.__name__:
+            keys=['rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
+        else:
+            keys=['fpfs','rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
+        data['vals'] = [values[k] for k in keys]
+        for i,k in enumerate(['c0','c1','c2','c3','c4']): data['cvals'][i] = values[k]
+        return f(*args, **data)
+    return wrapper
+
+@format_args
+def brightness(t, values, **kwargs):
+    brightnessCurve( kwargs['time'], kwargs['cvals'], *kwargs['vals'], len(kwargs['time']), kwargs['model'])
+    return kwargs['model']
+
+@format_args
+def phasecurve(t, values, **kwargs):
+    phaseCurve(kwargs['time'], kwargs['cvals'], *kwargs['vals'], len(kwargs['time']), kwargs['model'])
+    return kwargs['model']
+
+@format_args
+def orbitalradius(t, values, **kwargs):
+    orbitalRadius( kwargs['time'], *kwargs['vals'], len(kwargs['time']), kwargs['model'] )
+    return kwargs['model'] 
+
+@format_args
+def transit(t, values, **kwargs):
+    occultquadC( kwargs['time'], *kwargs['vals'], len(kwargs['time']), kwargs['model'] )
+    return kwargs['model'] 
 ########################################################
 
-def phasecurve(t, values):
-    time = np.require(t,dtype=ctypes.c_double,requirements='C')
-    model = np.require(np.zeros(len(t)),dtype=ctypes.c_double,requirements='C')
-    cvals = np.require(np.zeros(5),dtype=ctypes.c_double,requirements='C')
-    keys = ['fpfs', 'rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
-    vals = [values[k] for k in keys]
-    for i,k in enumerate(['c0','c1','c2','c3','c4']): cvals[i] = values[k]
-    phaseCurve( time, cvals, *vals, len(time), model)
-    return model
 
-def orbitalradius(t, values):
-    time = np.require(t,dtype=ctypes.c_double,requirements='C')
-    model = np.zeros(len(t),dtype=ctypes.c_double)
-    model = np.require(model,dtype=ctypes.c_double,requirements='C')
-    keys = ['rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
-    vals = [values[k] for k in keys]
-    orbitalRadius( time, *vals, len(time), model )
-    return model
 
-def transit(t, values):
-    time = np.require(t,dtype=ctypes.c_double,requirements='C')
-    model = np.zeros(len(t),dtype=ctypes.c_double)
-    model = np.require(model,dtype=ctypes.c_double,requirements='C')
-    keys = ['rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
-    vals = [values[k] for k in keys]
-    occultquadC( time, *vals, len(time), model )
-    return model
 
-def weightedflux(flux,gw,nearest):
-    return np.sum(flux[nearest]*gw,axis=-1)
 
-def gaussian_weights(X, w=None, neighbors=50, feature_scale=1000):
-    if isinstance(w, type(None)): w = np.ones(X.shape[1])
-    Xm = (X - np.median(X,0))*w
-    kdtree = spatial.cKDTree(Xm*feature_scale)
-    nearest = np.zeros((X.shape[0],neighbors))
-    gw = np.zeros((X.shape[0],neighbors),dtype=float)
-    for point in range(X.shape[0]):
-        ind = kdtree.query(kdtree.data[point],neighbors+1)[1][1:]
-        dX = Xm[ind] - Xm[point]
-        Xstd = np.std(dX,0)
-        gX = np.exp(-dX**2/(2*Xstd**2))
-        gwX = np.product(gX,1)
-        gw[point,:] = gwX/gwX.sum()
-        nearest[point,:] = ind
-    gw[np.isnan(gw)] = 0.01
-    return gw, nearest.astype(int)
 
 class lc_fitter(object):
 
@@ -342,6 +349,25 @@ def get_ld(priors, band='Spit36'):
     lin,quad = re.findall(r"\d+\.\d+",res.text)
     return float(lin), float(quad)
 
+def weightedflux(flux,gw,nearest):
+    return np.sum(flux[nearest]*gw,axis=-1)
+
+def gaussian_weights(X, w=None, neighbors=50, feature_scale=1000):
+    if isinstance(w, type(None)): w = np.ones(X.shape[1])
+    Xm = (X - np.median(X,0))*w
+    kdtree = spatial.cKDTree(Xm*feature_scale)
+    nearest = np.zeros((X.shape[0],neighbors))
+    gw = np.zeros((X.shape[0],neighbors),dtype=float)
+    for point in range(X.shape[0]):
+        ind = kdtree.query(kdtree.data[point],neighbors+1)[1][1:]
+        dX = Xm[ind] - Xm[point]
+        Xstd = np.std(dX,0)
+        gX = np.exp(-dX**2/(2*Xstd**2))
+        gwX = np.product(gX,1)
+        gw[point,:] = gwX/gwX.sum()
+        nearest[point,:] = ind
+    gw[np.isnan(gw)] = 0.01
+    return gw, nearest.astype(int)
 if __name__ == "__main__":
     import json
     import pickle 
@@ -390,10 +416,10 @@ if __name__ == "__main__":
     print((priors['b']['rp']*rjup / (priors['R*']*rsun))**2)
     # syspars = np.array([wx,wy,npp]).T
 
-    time = np.linspace(0,1,100000)
+    time = np.linspace(0,1,10000)
     plt.plot(time, phasecurve(time, prior),'k.', alpha=0.5)
     plt.plot(time, transit(time,prior), 'r.',alpha=0.5)
-    
+    plt.plot(time, brightness(time, prior), 'c.', alpha=0.5)
     plt.show()
     dude()
     

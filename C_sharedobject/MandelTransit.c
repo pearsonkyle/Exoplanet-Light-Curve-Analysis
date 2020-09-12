@@ -28,6 +28,8 @@
 void orbitalradius(double *t, double p, double ar, double P, double i, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *radius);
 void occultquad(double *t, double p, double ar, double P, double i, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F);
 void phasecurve(double *t, double *C, double fpfs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F);
+void brightness(double *t, double *C, double fpfs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F);
+
 
 // Elliptic integral arproximations
 double E(double k);
@@ -287,6 +289,45 @@ double occultuni(double z, double w)
 		muo1 = 1.0-w*w ;
 	}
 	return muo1;
+}
+
+
+
+void brightness(double *t, double *C, double fpfs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F)
+{
+	// transit 
+	//occultquad(t, rprs, ars, P, inc, gamma1, gamma2, e, longPericenter, tmid, n, F);
+
+	// eclipse
+	// https://arxiv.org/pdf/1001.2010.pdf eq 33
+	double *eclipse = (double *) malloc(sizeof(double)*(int)n);
+	double tme = tmid + P*0.5*(1+e*(4*invPi)*cos(longPericenter*pi/180.));
+	occultquad(t, rprs, ars, P, inc, 0, 0, e, longPericenter-180, tme, n, eclipse);
+	//double edepth = fpfs*rprs*rprs;
+
+	// offset so that mid-eclipse is 1
+	C[0] = -1*((C[1]*cos(2*pi*tme/P) + C[2]*sin(2*pi*tme/P) + C[3]*cos(4*pi*tme/P) + C[4]*sin(4*pi*tme/P))-1*fpfs*rprs*rprs);
+
+	// phase curve
+	for (int i=0; i<(int)n; i++)
+	{
+		F[i] *= (1 + C[0] + C[1]*cos(2*pi*t[i]/P) + C[2]*sin(2*pi*t[i]/P) + C[3]*cos(4*pi*t[i]/P) + C[4]*sin(4*pi*t[i]/P));
+		F[i] *= (eclipse[i]-1)*fpfs + 1;
+
+		// adjust ingress to mid-eclipse
+		// (floor( (eclipse[i]-1)*fpfs + 1 + edepth-1e-8)==0) - equivalent just more calculations
+		if (floor(eclipse[i]+rprs*rprs-1e-8)==0)
+		{
+			F[i] = 1;
+		}
+	
+		// adjust mid-eclipse to egress
+		if (floor(eclipse[i])==0)
+		{
+			F[i] = max(F[i],1);
+		}
+	}
+	free(eclipse);
 }
 
 

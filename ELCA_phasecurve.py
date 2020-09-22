@@ -1,4 +1,3 @@
-# Uses Gaussian Kernel Regression to handle errors correlated to centroid position
 import os
 import copy
 import ctypes
@@ -29,41 +28,48 @@ lib_trans = np.ctypeslib.load_library('lib_transit.so',
     os.path.join(os.path.dirname(os.path.realpath(__file__)),'C_sharedobject')
 )
 
-# load fn from library and define inputs
-occultquadC = lib_trans.occultquad
-
-# inputs
-occultquadC.argtypes = [array_1d_double, ctypes.c_double, ctypes.c_double, \
+# transit, orbital radius, anomaly
+input_type1 = [array_1d_double, ctypes.c_double, ctypes.c_double, \
                         ctypes.c_double, ctypes.c_double, ctypes.c_double, \
                         ctypes.c_double, ctypes.c_double, ctypes.c_double, \
                         ctypes.c_double, ctypes.c_double, array_1d_double ]
 
-# no outputs, last *double input is saved over in C
-occultquadC.restype = None
-
-# phase curve
-phaseCurve = lib_trans.phasecurve
-phaseCurve.argtypes = [array_1d_double, array_1d_double, ctypes.c_double, ctypes.c_double, \
+# phasecurve, brightness, eclipse
+input_type2 = [array_1d_double, array_1d_double, ctypes.c_double, ctypes.c_double, \
                         ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, \
                         ctypes.c_double, ctypes.c_double, ctypes.c_double, \
                         ctypes.c_double, ctypes.c_double, array_1d_double ]
-phaseCurve.restype = None
+
+# transit
+occultquadC = lib_trans.occultquad
+occultquadC.argtypes = input_type1
+occultquadC.restype = None
 
 # orbital radius
 orbitalRadius = lib_trans.orbitalradius
-orbitalRadius.argtypes = [array_1d_double, ctypes.c_double, ctypes.c_double, \
-                        ctypes.c_double, ctypes.c_double, ctypes.c_double, \
-                        ctypes.c_double, ctypes.c_double, ctypes.c_double, \
-                        ctypes.c_double, ctypes.c_double, array_1d_double ]
+orbitalRadius.argtypes = input_type1
 orbitalRadius.restype = None
+
+# true anomaloy
+orbitalAnomaly = lib_trans.orbitalanomaly
+orbitalAnomaly.argtypes = input_type1
+orbitalAnomaly.restype = None
+
+# phase curve
+phaseCurve = lib_trans.phasecurve
+phaseCurve.argtypes = input_type2
+phaseCurve.restype = None
 
 # phase curve without eclipse
 brightnessCurve = lib_trans.brightness
-brightnessCurve.argtypes = [array_1d_double, array_1d_double, ctypes.c_double, ctypes.c_double, \
-                        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, \
-                        ctypes.c_double, ctypes.c_double, ctypes.c_double, \
-                        ctypes.c_double, ctypes.c_double, array_1d_double ]
+brightnessCurve.argtypes = input_type2
 brightnessCurve.restype = None
+
+# eclipse
+eclipseC = lib_trans.eclipse
+eclipseC.argtypes = input_type2
+eclipseC.restype = None
+
 
 # cast arrays into C compatible format with pythonic magic
 def format_args(f):    
@@ -76,7 +82,7 @@ def format_args(f):
         data['time'] = np.require(t,dtype=ctypes.c_double,requirements='C')
         data['model'] = np.require(np.ones(len(t)),dtype=ctypes.c_double,requirements='C')
         data['cvals'] = np.require(np.zeros(5),dtype=ctypes.c_double,requirements='C')
-        if 'transit' in f.__name__ or 'orbit' in f.__name__:
+        if 'transit' in f.__name__ or 'orbit' in f.__name__ or 'anomaly' in f.__name__:
             keys=['rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
         else:
             keys=['fpfs','rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
@@ -96,19 +102,75 @@ def phasecurve(t, values, **kwargs):
     return kwargs['model']
 
 @format_args
+def eclipse(t, values, **kwargs):
+    eclipseC( kwargs['time'], kwargs['cvals'], *kwargs['vals'], len(kwargs['time']), kwargs['model'])
+    return kwargs['model']
+
+@format_args
 def orbitalradius(t, values, **kwargs):
     orbitalRadius( kwargs['time'], *kwargs['vals'], len(kwargs['time']), kwargs['model'] )
     return kwargs['model'] 
 
 @format_args
+def trueanomaly(t, values, **kwargs):
+    orbitalAnomaly( kwargs['time'], *kwargs['vals'], len(kwargs['time']), kwargs['model'] )
+    return kwargs['model']
+
+@format_args
 def transit(t, values, **kwargs):
     occultquadC( kwargs['time'], *kwargs['vals'], len(kwargs['time']), kwargs['model'] )
-    return kwargs['model'] 
+    return kwargs['model']
 ########################################################
 
+def fourierseries(t, C, P):
+    return (1 + C[0] + C[1]*np.cos(2*np.pi*t/P) + C[2]*np.sin(2*np.pi*t/P) + C[3]*np.cos(4*np.pi*t/P) + C[4]*np.sin(4*np.pi*t/P))
 
+class map_fitter(object):
 
+    def __init__(self, time, prior):
+        self.time = time
+        self.prior = prior
+        self.fit_lm()
+        
+    def fit_lm(self): 
 
+        # transit starts at -pi/2    
+        ta = trueanomaly(self.time, self.prior)
+        longitude = np.rad2deg(ta)+90
+
+        # TODO adjust for inclination
+        latitude = np.linspace(-90,90,91) # break in 2 deg chunks
+
+        # fractional area emitting light in direction of observer
+        coslat = np.cos(np.deg2rad(latitude)) 
+
+        # reproduce amplitude from observations
+        phase_amp = brightness(self.time, self.prior)
+        brightmap = np.zeros(phase_amp.shape)
+
+        def map2min(pars):
+            # approx longitudinal brightness map with fourier series
+            map1d = fourierseries(self.time, pars, self.prior['per'])
+            # TODO convert to temperature map instead? 
+
+            # assumes planet is tidally locked
+            lmask = (longitude%360 > (longitude[0]-90)%360 ) & (longitude%360 < (longitude[0]+90)%360)
+
+            # lamberts law of cosines
+            dlong = longitude - longitude[0]
+            coslong = np.cos(np.deg2rad(dlong)) * lmask
+
+            # compute disk integrated brightness for each orbital phase
+            for i in range(map1d.shape[0]):
+                brightmap[i] = np.sum(map1d*np.roll(coslong,i))
+            
+            # TODO figure out how to normalize
+            # compare to observations
+            return (phase_amp - brightmap/brightmap.min())**2
+
+        freekeys = ['c0','c1','c2','c3','c4']
+        res = least_squares(map2min, x0=[self.prior[k] for k in freekeys], jac='3-point', loss='linear')
+        print(res.x)
 
 
 class lc_fitter(object):
@@ -172,6 +234,7 @@ class lc_fitter(object):
         self.model = self.transit*self.wf
         self.residuals = self.data - self.model
         self.detrended = self.data/self.wf
+        self.phase = (self.time-self.parameters['tmid'])/self.parameters['per']
 
     def fit_nested(self):
         freekeys = list(self.bounds.keys())
@@ -206,12 +269,15 @@ class lc_fitter(object):
             # transform unit cube to prior volume
             return (boundarray[:,0] + bounddiff*upars)
 
-        dsampler = dynesty.DynamicNestedSampler(
-            loglike, prior_transform,
-            ndim=len(freekeys), bound='multi', sample='unif', 
-            maxiter_init=5000, dlogz_init=1, dlogz=0.05,
-            maxiter_batch=100, maxbatch=10, nlive_batch=100
-        )
+        dsampler = dynesty.NestedSampler(loglike, prior_transform, len(freekeys), sample='unif', bound='multi', nlive=1000)
+        
+        # DynamicNestedSampler(
+        #     loglike, prior_transform,
+        #     ndim=len(freekeys), bound='multi',
+        #     maxiter_init=5000, dlogz_init=1, dlogz=0.05,
+        #     maxiter_batch=1000, maxbatch=10, nlive_batch=100
+        # )
+        
         dsampler.run_nested()
         self.results = dsampler.results
         del(self.results['bound'])
@@ -286,34 +352,63 @@ class lc_fitter(object):
         self.model = self.transit*self.wf
         self.residuals = self.data - self.model
         self.detrended = self.data/self.wf
+        self.phase = (self.time-self.parameters['tmid'])/self.parameters['per']
 
-    def plot_bestfit(self, bin_dt=10./(60*24), zoom=False):
+    def plot_bestfit(self, bin_dt=10./(60*24), zoom=False, phase=True):
         f = plt.figure(figsize=(12,7))
         # f.subplots_adjust(top=0.94,bottom=0.08,left=0.07,right=0.96)
         ax_lc = plt.subplot2grid((4,5), (0,0), colspan=5,rowspan=3)
         ax_res = plt.subplot2grid((4,5), (3,0), colspan=5, rowspan=1)
         axs = [ax_lc, ax_res]
+
+        #print("in elca_phasecurve, prototype phase calculation")
+        #import pdb; pdb.set_trace()
+
         bt, bf = time_bin(self.time, self.detrended, bin_dt)
-        axs[0].plot(bt,bf,'co',alpha=0.5,zorder=2)
-        axs[0].plot(self.time, self.transit, 'r-', zorder=3)
-        axs[0].set_xlabel("Time [day]")
+        bp = (bt-self.parameters['tmid'])/self.parameters['per']
+
+        if phase:
+            axs[0].plot(bp,bf,'co',alpha=0.5,zorder=2)
+            axs[0].plot(self.phase, self.transit, 'r-', zorder=3)
+            axs[0].set_xlim([min(self.phase), max(self.phase)])
+            axs[0].set_xlabel("Phase ")
+        else:
+            axs[0].plot(bt,bf,'co',alpha=0.5,zorder=2)
+            axs[0].plot(self.time, self.transit, 'r-', zorder=3)
+            axs[0].set_xlim([min(self.time), max(self.time)])
+            axs[0].set_xlabel("Time [day]")
+       
+            
         axs[0].set_ylabel("Relative Flux")
         axs[0].grid(True,ls='--')
-        axs[0].set_xlim([min(self.time), max(self.time)])
 
         if zoom:
             axs[0].set_ylim([1-1.25*self.parameters['rprs']**2, 1+0.5*self.parameters['rprs']**2])
-        else:        
-            axs[0].errorbar(self.time, self.detrended, yerr=np.std(self.residuals)/np.median(self.data), ls='none', marker='.', color='black', zorder=1, alpha=0.01)
+        else:
+            if phase:
+                axs[0].errorbar(self.phase, self.detrended, yerr=np.std(self.residuals)/np.median(self.data), ls='none', marker='.', color='black', zorder=1, alpha=0.01)
+            else:
+                axs[0].errorbar(self.time, self.detrended, yerr=np.std(self.residuals)/np.median(self.data), ls='none', marker='.', color='black', zorder=1, alpha=0.01)
 
-        axs[1].plot(self.time, self.residuals/np.median(self.data)*1e6, 'k.', alpha=0.15, label=r'$\sigma$ = {:.0f} ppm'.format( np.std(self.residuals/np.median(self.data)*1e6)))
         bt, br = time_bin(self.time, self.residuals/np.median(self.data)*1e6, bin_dt)
-        axs[1].plot(bt,br,'c.',alpha=0.5,zorder=2,label=r'$\sigma$ = {:.0f} ppm'.format( np.std(br)))
+        bp = (bt-self.parameters['tmid'])/self.parameters['per']
+
+        if phase:
+            axs[1].plot(self.phase, self.residuals/np.median(self.data)*1e6, 'k.', alpha=0.15, label=r'$\sigma$ = {:.0f} ppm'.format( np.std(self.residuals/np.median(self.data)*1e6)))
+            axs[1].plot(bp,br,'c.',alpha=0.5,zorder=2,label=r'$\sigma$ = {:.0f} ppm'.format( np.std(br)))
+            axs[1].set_xlim([min(self.phase), max(self.phase)])
+            axs[1].set_xlabel("Phase")
+
+        else:
+            axs[1].plot(self.time, self.residuals/np.median(self.data)*1e6, 'k.', alpha=0.15, label=r'$\sigma$ = {:.0f} ppm'.format( np.std(self.residuals/np.median(self.data)*1e6)))
+            axs[1].plot(bt,br,'c.',alpha=0.5,zorder=2,label=r'$\sigma$ = {:.0f} ppm'.format( np.std(br)))
+            axs[1].set_xlim([min(self.time), max(self.time)])
+            axs[1].set_xlabel("Time [day]")
+        
+        
         axs[1].legend(loc='best')
-        axs[1].set_xlabel("Time [day]")
         axs[1].set_ylabel("Residuals [ppm]")
         axs[1].grid(True,ls='--')
-        axs[1].set_xlim([min(self.time), max(self.time)])
         plt.tight_layout()
         return f,axs
 
@@ -368,6 +463,9 @@ def gaussian_weights(X, w=None, neighbors=50, feature_scale=1000):
         nearest[point,:] = ind
     gw[np.isnan(gw)] = 0.01
     return gw, nearest.astype(int)
+
+    
+
 if __name__ == "__main__":
     import json
     import pickle 
@@ -399,7 +497,7 @@ if __name__ == "__main__":
         'u1': u1, 'u2': u2, 
     
         # phase curve amplitudes
-        'c0':0, 'c1':0, 'c2':-5e-4, 'c3':0., 'c4':0
+        'c0':5e-4, 'c1':0, 'c2':-5e-4, 'c3':0., 'c4':0
     }
 
     print("edepth:",prior['rprs']**2 * prior['fpfs'])
@@ -412,15 +510,30 @@ if __name__ == "__main__":
     # wx = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_xcent']
     # wy = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_ycent']
     # npp = pipeline_data['Spitzer-IRAC-IR-45-SUB']['b'][1]['aper_npp']
-
-    print((priors['b']['rp']*rjup / (priors['R*']*rsun))**2)
     # syspars = np.array([wx,wy,npp]).T
 
-    time = np.linspace(0,1,10000)
-    plt.plot(time, phasecurve(time, prior),'k.', alpha=0.5)
-    plt.plot(time, transit(time,prior), 'r.',alpha=0.5)
-    plt.plot(time, brightness(time, prior), 'c.', alpha=0.5)
+    print((priors['b']['rp']*rjup / (priors['R*']*rsun))**2)
+
+    time = np.linspace(0, priors['b']['period'], 10000)
+
+    mapfit = map_fitter(time, prior)
+    
+
+    f,ax = plt.subplots(2)
+    phase = (time - prior['tmid'])/prior['per']
+    ax[0].plot(phase, phasecurve(time, prior),'k.', alpha=0.5)
+    ax[0].plot(phase, transit(time,prior), 'r.',alpha=0.5)
+    ax[0].plot(phase, brightness(time, prior), 'c.', alpha=0.5)
+    #ax[0].plot(time, eclipse(time, prior), 'm.', alpha=0.5)
+    
+    ta = trueanomaly(time, prior)
+    longitude = np.rad2deg(ta)+90
+    ax[1].plot(ta, brightness(time, prior), 'k.', alpha=0.5)
+    ax[1].set_xlabel("True Anomaly")
+    ax[1].set_ylabel("Relative Flux")
     plt.show()
+
+
     dude()
     
     mybounds = {

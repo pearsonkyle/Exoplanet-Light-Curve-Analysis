@@ -87,7 +87,7 @@ def gaussian_weights(X, w=None, neighbors=50, feature_scale=1000):
 
 class lc_fitter(object):
 
-    def __init__(self, time, data, dataerr, prior, bounds, syspars, neighbors=50):
+    def __init__(self, time, data, dataerr, prior, bounds, syspars, neighbors=100, eclipse=False):
         self.time = time
         self.data = data
         self.dataerr = dataerr
@@ -95,6 +95,7 @@ class lc_fitter(object):
         self.bounds = bounds
         self.syspars = syspars
         self.gw, self.nearest = gaussian_weights(syspars, neighbors=neighbors)
+        self.eclipse = eclipse  # offset model such that minimum is at 1
         self.fit_nested()
 
     def fit_nested(self):
@@ -104,36 +105,38 @@ class lc_fitter(object):
 
         # alloc arrays for C
         time = np.require(self.time,dtype=ctypes.c_double,requirements='C')
-        lightcurve = np.zeros(len(self.time),dtype=ctypes.c_double)
-        lightcurve = np.require(lightcurve,dtype=ctypes.c_double,requirements='C')
+        self.lightcurve = np.zeros(len(self.time),dtype=ctypes.c_double)
+        self.lightcurve = np.require(self.lightcurve,dtype=ctypes.c_double,requirements='C')
 
         def loglike(pars):
             # update free parameters
             for i in range(len(pars)):
                 self.prior[freekeys[i]] = pars[i]
-            # lightcurve = transit(self.time, self.prior)
 
             # call C function
             keys = ['rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
             vals = [self.prior[k] for k in keys]
-            occultquadC(time, *vals, len(time), lightcurve)
-            
-            detrended = self.data/lightcurve
+            occultquadC(time, *vals, len(time), self.lightcurve)
+            self.lightcurve += self.eclipse*(1-np.min(self.lightcurve))
+            detrended = self.data/self.lightcurve
             wf = weightedflux(detrended, self.gw, self.nearest)
-            model = lightcurve*wf
+            model = self.lightcurve*wf
             return -0.5 * np.sum(((self.data-model)**2/self.dataerr**2))
         
         def prior_transform(upars):
             # transform unit cube to prior volume
             return (boundarray[:,0] + bounddiff*upars)
 
+        #dsampler = dynesty.NestedSampler(loglike, prior_transform, len(freekeys), sample='unif', bound='multi', nlive=1000)
+
         dsampler = dynesty.DynamicNestedSampler(
             loglike, prior_transform,
             ndim=len(freekeys), bound='multi', sample='unif', 
-            maxiter_init=5000, dlogz_init=1, dlogz=0.05,
-            maxiter_batch=100, maxbatch=10, nlive_batch=100
+            maxiter_init=5000, dlogz_init=1, dlogz=0.05, 
+            maxiter_batch=1000, maxbatch=10, nlive_batch=100
         )
-        dsampler.run_nested()
+
+        dsampler.run_nested(maxiter=2e6,maxcall=2e6)
         self.results = dsampler.results
 
         # alloc data for best fit + error
@@ -181,6 +184,7 @@ class lc_fitter(object):
         res = []
         for i in range(len(tests)):
             lightcurve = transit(self.time, tests[i])
+            lightcurve += self.eclipse*(1-np.min(lightcurve))
             detrended = self.data / lightcurve
             wf = weightedflux(detrended, self.gw, self.nearest)
             model = lightcurve*wf
@@ -203,6 +207,7 @@ class lc_fitter(object):
 
         # best fit model
         self.transit = transit(self.time, self.parameters)
+        self.transit += self.eclipse*(1-np.min(self.transit))
         detrended = self.data / self.transit
         self.wf = weightedflux(detrended, self.gw, self.nearest)
         self.model = self.transit*self.wf

@@ -25,10 +25,12 @@
        __typeof__ (b) _b = (b); \
      _a > _b ? _a : _b; })
 
+void orbitalanomaly(double *t, double p, double ar, double P, double i, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *anomaly);
 void orbitalradius(double *t, double p, double ar, double P, double i, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *radius);
 void occultquad(double *t, double p, double ar, double P, double i, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F);
 void phasecurve(double *t, double *C, double fpfs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F);
 void brightness(double *t, double *C, double fpfs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F);
+void eclipse(double *t, double *C, double fpfs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F);
 
 
 // Elliptic integral arproximations
@@ -292,12 +294,8 @@ double occultuni(double z, double w)
 }
 
 
-
-void brightness(double *t, double *C, double fpfs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F)
+void eclipse(double *t, double *C, double fpfs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F)
 {
-	// transit 
-	//occultquad(t, rprs, ars, P, inc, gamma1, gamma2, e, longPericenter, tmid, n, F);
-
 	// eclipse
 	// https://arxiv.org/pdf/1001.2010.pdf eq 33
 	double *eclipse = (double *) malloc(sizeof(double)*(int)n);
@@ -330,6 +328,26 @@ void brightness(double *t, double *C, double fpfs, double rprs, double ars, doub
 	free(eclipse);
 }
 
+
+void brightness(double *t, double *C, double fpfs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F)
+{
+	// eclipse
+	// https://arxiv.org/pdf/1001.2010.pdf eq 33
+	double *eclipse = (double *) malloc(sizeof(double)*(int)n);
+	double tme = tmid + P*0.5*(1+e*(4*invPi)*cos(longPericenter*pi/180.));
+	occultquad(t, rprs, ars, P, inc, 0, 0, e, longPericenter-180, tme, n, eclipse);
+	//double edepth = fpfs*rprs*rprs;
+
+	// offset so that mid-eclipse is 1
+	C[0] = -1*((C[1]*cos(2*pi*tme/P) + C[2]*sin(2*pi*tme/P) + C[3]*cos(4*pi*tme/P) + C[4]*sin(4*pi*tme/P))-1*fpfs*rprs*rprs);
+
+	// phase curve
+	for (int i=0; i<(int)n; i++)
+	{
+		F[i] *= (1 + C[0] + C[1]*cos(2*pi*t[i]/P) + C[2]*sin(2*pi*t[i]/P) + C[3]*cos(4*pi*t[i]/P) + C[4]*sin(4*pi*t[i]/P));
+	}
+	free(eclipse);
+}
 
 void phasecurve(double *t, double *C, double fpfs, double rprs, double ars, double P, double inc, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *F)
 {
@@ -368,7 +386,6 @@ void phasecurve(double *t, double *C, double fpfs, double rprs, double ars, doub
 	free(eclipse);
 }
 
-
 void orbitalradius(double *t, double p, double ar, double P, double i, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *radius)
 {
 	double tmidoverP, tmidf;
@@ -395,6 +412,33 @@ void orbitalradius(double *t, double p, double ar, double P, double i, double ga
 		m = 2.0*pi*invP*(ti-tp);
 		f = kepler_opt(m,epoverm,e1);
 		radius[ii] = ar*(1.0 - e1*e1)/(1.0 + e1*cos(f));
+	}
+}
+
+void orbitalanomaly(double *t, double p, double ar, double P, double i, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *anomaly)
+{
+	double tmidoverP, tmidf;
+	int ii;
+	int Npoints = (int)n;
+
+	// optimization parameters
+	double invP = 1./P;
+	double sqrtee = sqrt(1-e*e);
+	double inv180 = 1./180.;
+	double epoverm = sqrt((1.0+e)/(1.0-e));
+
+	double ti;
+	double omega;
+	for (ii=0; ii<Npoints; ii++)
+	{
+		ti = t[ii];
+		double f1, e1,tp, m, f;
+		f1 = 1.50*pi-longPericenter*pi*inv180;
+		e1 = e;
+
+		tp = tmid+P*sqrtee*0.5*invPi*(e1*sin(f1)/(1.0+e1*cos(f1))-2.0/sqrtee*atan( (sqrtee*tan(0.5*f1))/(1.0+e1) ));
+		m = 2.0*pi*invP*(ti-tp);
+		anomaly[ii] = kepler_opt(m,epoverm,e1);
 	}
 }
 

@@ -218,8 +218,9 @@ class lc_fitter(object):
             return ((self.data-model)/self.dataerr)**2 
 
         res = least_squares(lc2min, x0=[self.prior[k] for k in freekeys], 
-            bounds=[boundarray[:,0], boundarray[:,1]], jac='3-point', loss='linear')
-        
+            bounds=[boundarray[:,0], boundarray[:,1]], jac='3-point', 
+            loss='linear', method='dogbox', xtol=None, ftol=1e-4, tr_options='exact')
+
         self.parameters = copy.deepcopy(self.prior)
         self.errors = {}
 
@@ -266,8 +267,18 @@ class lc_fitter(object):
             return -0.5 * np.sum(((self.data-model)**2/self.dataerr**2))
         
         def prior_transform(upars):
-            # transform unit cube to prior volume
-            return (boundarray[:,0] + bounddiff*upars)
+            freekeys = list(self.bounds.keys())
+            boundarray = np.array([self.bounds[k] for k in freekeys])
+            bounddiff = np.diff(boundarray,1).reshape(-1)
+            vals = (boundarray[:,0] + bounddiff*upars)
+
+            # set limits of phase amplitude to be less than eclipse depth
+            edepth = vals[freekeys.index('rprs')]**2 * vals[freekeys.index('fpfs')]
+            for k in ['c1','c2','c3','c4']:
+                ki = freekeys.index(k)
+                vals[ki] = upars[ki] * edepth - 0.5*edepth
+
+            return vals
 
         dsampler = dynesty.NestedSampler(loglike, prior_transform, len(freekeys), sample='unif', bound='multi', nlive=1000)
         
@@ -277,6 +288,7 @@ class lc_fitter(object):
         #     maxiter_init=5000, dlogz_init=1, dlogz=0.05,
         #     maxiter_batch=1000, maxbatch=10, nlive_batch=100
         # )
+        
         
         dsampler.run_nested()
         self.results = dsampler.results

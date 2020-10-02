@@ -127,16 +127,16 @@ class lc_fitter(object):
             # transform unit cube to prior volume
             return (boundarray[:,0] + bounddiff*upars)
 
-        #dsampler = dynesty.NestedSampler(loglike, prior_transform, len(freekeys), sample='unif', bound='multi', nlive=1000)
+        dsampler = dynesty.NestedSampler(loglike, prior_transform, len(freekeys), sample='unif', bound='multi', nlive=1000)
 
-        dsampler = dynesty.DynamicNestedSampler(
-            loglike, prior_transform,
-            ndim=len(freekeys), bound='multi', sample='unif', 
-            maxiter_init=5000, dlogz_init=1, dlogz=0.05, 
-            maxiter_batch=1000, maxbatch=10, nlive_batch=100
-        )
+        #dsampler = dynesty.DynamicNestedSampler(
+        #    loglike, prior_transform,
+        #    ndim=len(freekeys), bound='multi', sample='unif', 
+        #    maxiter_init=5000, dlogz_init=1, dlogz=0.05, 
+        #    maxiter_batch=1000, maxbatch=10, nlive_batch=100
+        #)
 
-        dsampler.run_nested(maxiter=2e6,maxcall=2e6)
+        dsampler.run_nested(maxiter=1e6,maxcall=1e6)
         self.results = dsampler.results
 
         # alloc data for best fit + error

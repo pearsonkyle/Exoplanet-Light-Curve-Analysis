@@ -1,4 +1,5 @@
 # Uses Gaussian Kernel Regression to handle errors correlated to centroid position
+# plus arbitrary quadratic detrending model
 import os
 import copy
 import ctypes
@@ -38,7 +39,23 @@ occultquadC.argtypes = [array_1d_double, ctypes.c_double, ctypes.c_double, \
 # no outputs, last *double input is saved over in C
 occultquadC.restype = None
 
+phaseCurve = lib_trans.phasecurve
+phaseCurve.argtypes = [array_1d_double, array_1d_double, ctypes.c_double, ctypes.c_double, \
+                        ctypes.c_double, ctypes.c_double, ctypes.c_double, \
+                        ctypes.c_double, ctypes.c_double, ctypes.c_double, \
+                        ctypes.c_double, ctypes.c_double, array_1d_double ]
+phaseCurve.restype = None  
 ########################################################
+
+def phasecurve(t, values):
+    time = np.require(t,dtype=ctypes.c_double,requirements='C')
+    model = np.zeros(len(t),dtype=ctypes.c_double)
+    model = np.require(model,dtype=ctypes.c_double,requirements='C')
+    keys = ['rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
+    vals = [values[k] for k in keys]
+    cvals = [values[k] for k in ['c0','c1','c2','c3','c4']]
+    phaseCurve( time, *cvals, *vals, len(time), model)
+    return model
 
 def transit(t, values):
     time = np.require(t,dtype=ctypes.c_double,requirements='C')
@@ -52,7 +69,7 @@ def transit(t, values):
 def weightedflux(flux,gw,nearest):
     return np.sum(flux[nearest]*gw,axis=-1)
 
-def gaussian_weights(X, w=None, neighbors=50, feature_scale=1000):
+def gaussian_weights(X, w=None, neighbors=50, feature_scale=10):
     if isinstance(w, type(None)): w = np.ones(X.shape[1])
     Xm = (X - np.median(X,0))*w
     kdtree = spatial.cKDTree(Xm*feature_scale)
@@ -71,7 +88,7 @@ def gaussian_weights(X, w=None, neighbors=50, feature_scale=1000):
 
 class lc_fitter(object):
 
-    def __init__(self, time, data, dataerr, prior, bounds, syspars, neighbors=100, eclipse=False):
+    def __init__(self, time, data, dataerr, prior, bounds, syspars, neighbors=100):
         self.time = time
         self.data = data
         self.dataerr = dataerr
@@ -79,7 +96,6 @@ class lc_fitter(object):
         self.bounds = bounds
         self.syspars = syspars
         self.gw, self.nearest = gaussian_weights(syspars, neighbors=neighbors)
-        self.eclipse = eclipse  # offset model such that minimum is at 1
         self.fit_nested()
 
     def fit_nested(self):
@@ -89,38 +105,38 @@ class lc_fitter(object):
 
         # alloc arrays for C
         time = np.require(self.time,dtype=ctypes.c_double,requirements='C')
-        self.lightcurve = np.zeros(len(self.time),dtype=ctypes.c_double)
-        self.lightcurve = np.require(self.lightcurve,dtype=ctypes.c_double,requirements='C')
+        lightcurve = np.zeros(len(self.time),dtype=ctypes.c_double)
+        lightcurve = np.require(lightcurve,dtype=ctypes.c_double,requirements='C')
+        stime = self.time-np.min(self.time)
 
         def loglike(pars):
             # update free parameters
             for i in range(len(pars)):
                 self.prior[freekeys[i]] = pars[i]
+            # lightcurve = transit(self.time, self.prior)
 
             # call C function
             keys = ['rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
             vals = [self.prior[k] for k in keys]
-            occultquadC(time, *vals, len(time), self.lightcurve)
-            self.lightcurve += self.eclipse*(1-np.min(self.lightcurve))
-            detrended = self.data/self.lightcurve
+            occultquadC(time, *vals, len(time), lightcurve)
+
+            airmass = self.prior['a0'] + self.prior['a1']*stime + self.prior['a2']*stime**2
+            detrended = self.data/(lightcurve*airmass)
             wf = weightedflux(detrended, self.gw, self.nearest)
-            model = self.lightcurve*wf
+            model = lightcurve*wf*airmass
             return -0.5 * np.sum(((self.data-model)**2/self.dataerr**2))
         
         def prior_transform(upars):
             # transform unit cube to prior volume
             return (boundarray[:,0] + bounddiff*upars)
 
-        #dsampler = dynesty.NestedSampler(loglike, prior_transform, len(freekeys), sample='unif', bound='multi', nlive=1000)
-
         dsampler = dynesty.DynamicNestedSampler(
             loglike, prior_transform,
             ndim=len(freekeys), bound='multi', sample='unif', 
-            maxiter_init=5000, dlogz_init=1, dlogz=0.05, 
-            maxiter_batch=1000, maxbatch=10, nlive_batch=100
+            maxiter_init=5000, dlogz_init=1, dlogz=0.05,
+            maxiter_batch=100, maxbatch=10, nlive_batch=100
         )
-
-        dsampler.run_nested(maxiter=2e6,maxcall=2e6)
+        dsampler.run_nested()
         self.results = dsampler.results
 
         # alloc data for best fit + error
@@ -168,10 +184,11 @@ class lc_fitter(object):
         res = []
         for i in range(len(tests)):
             lightcurve = transit(self.time, tests[i])
-            lightcurve += self.eclipse*(1-np.min(lightcurve))
-            detrended = self.data / lightcurve
+            airmass = tests[i]['a0'] + tests[i]['a1']*stime + tests[i]['a2']*stime**2
+
+            detrended = self.data / (lightcurve*airmass)
             wf = weightedflux(detrended, self.gw, self.nearest)
-            model = lightcurve*wf
+            model = lightcurve*wf*airmass
             residuals = self.data - model
             res.append(residuals)
             btime, br = time_bin(self.time, residuals)
@@ -191,12 +208,13 @@ class lc_fitter(object):
 
         # best fit model
         self.transit = transit(self.time, self.parameters)
-        self.transit += self.eclipse*(1-np.min(self.transit))
-        detrended = self.data / self.transit
+        self.airmass = tests[mi]['a0'] + tests[mi]['a1']*stime + tests[mi]['a2']*stime**2
+
+        detrended = self.data / (self.transit*self.airmass)
         self.wf = weightedflux(detrended, self.gw, self.nearest)
-        self.model = self.transit*self.wf
+        self.model = self.transit*self.wf*self.airmass
         self.residuals = self.data - self.model
-        self.detrended = self.data/self.wf
+        self.detrended = self.data/(self.wf*self.airmass)
 
     def plot_bestfit(self):
         f = plt.figure(figsize=(12,7))
@@ -204,27 +222,27 @@ class lc_fitter(object):
         ax_lc = plt.subplot2grid((4,5), (0,0), colspan=5,rowspan=3)
         ax_res = plt.subplot2grid((4,5), (3,0), colspan=5, rowspan=1)
         axs = [ax_lc, ax_res]
-        bt, bf = time_bin(self.time, self.detrended,1./(24*60))
+        bt, bf = time_bin(self.time, self.detrended)
         axs[0].errorbar(self.time, self.detrended, yerr=np.std(self.residuals)/np.median(self.data), ls='none', marker='.', color='black', zorder=1, alpha=0.5)
-        axs[0].plot(bt,bf,'c.',alpha=0.5,zorder=2)
+        axs[0].plot(bt,bf,'co',alpha=0.5,zorder=2)
         axs[0].plot(self.time, self.transit, 'r-', zorder=3)
         axs[0].set_xlabel("Time [day]")
         axs[0].set_ylabel("Relative Flux")
         axs[0].grid(True,ls='--')
-        
-        axs[1].plot(self.time, self.residuals/np.median(self.data)*1e6, 'k.', alpha=0.15, label=r'$\sigma$ = {:.0f} ppm'.format( np.std(self.residuals/np.median(self.data)*1e6)))
-        bt, br = time_bin(self.time, self.residuals/np.median(self.data)*1e6,1./(24*60))
-        axs[1].plot(bt,br,'c.',alpha=0.5,zorder=2,label=r'$\sigma$ = {:.0f} ppm'.format( np.std(br)))
 
-        axs[1].legend(loc='best')
+        axs[1].plot(self.time, self.residuals/np.median(self.data)*1e6, 'k.', 
+            label=r"$\sigma$={:.0f} ppm".format(np.std(self.residuals/np.median(self.data)*1e6)), alpha=0.5)
+        bt, br = time_bin(self.time, self.residuals/np.median(self.data)*1e6)
+        axs[1].plot(bt,br,'c.',alpha=0.5,zorder=2,label=r"$\sigma$={:.0f} ppm".format(np.std(br)))
         axs[1].set_xlabel("Time [day]")
         axs[1].set_ylabel("Residuals [ppm]")
         axs[1].grid(True,ls='--')
+        axs[1].legend(loc='best')
         plt.tight_layout()
 
         return f,axs
 
-def time_bin(time, flux, dt=1./(60*24)):
+def time_bin(time, flux, dt=5./(60*24)):
     bins = int(np.floor((max(time) - min(time))/dt))
     bflux = np.zeros(bins)
     btime = np.zeros(bins)

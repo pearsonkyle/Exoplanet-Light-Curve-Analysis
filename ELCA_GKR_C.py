@@ -117,7 +117,7 @@ class lc_fitter(object):
             keys = ['rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
             vals = [self.prior[k] for k in keys]
             occultquadC(time, *vals, len(time), self.lightcurve)
-            self.lightcurve += self.eclipse*(1-np.min(self.lightcurve))
+            #self.lightcurve += self.eclipse*(1-np.min(self.lightcurve))
             detrended = self.data/self.lightcurve
             wf = weightedflux(detrended, self.gw, self.nearest)
             model = self.lightcurve*wf
@@ -136,7 +136,7 @@ class lc_fitter(object):
         #    maxiter_batch=1000, maxbatch=10, nlive_batch=100
         #)
 
-        dsampler.run_nested(maxiter=1e6,maxcall=1e6)
+        dsampler.run_nested(maxiter=1e6,maxcall=1e6, dlogz=0.05)
         self.results = dsampler.results
 
         # alloc data for best fit + error
@@ -214,13 +214,13 @@ class lc_fitter(object):
         self.residuals = self.data - self.model
         self.detrended = self.data/self.wf
 
-    def plot_bestfit(self):
+    def plot_bestfit(self,dt=5.):
         f = plt.figure(figsize=(12,7))
         # f.subplots_adjust(top=0.94,bottom=0.08,left=0.07,right=0.96)
         ax_lc = plt.subplot2grid((4,5), (0,0), colspan=5,rowspan=3)
         ax_res = plt.subplot2grid((4,5), (3,0), colspan=5, rowspan=1)
         axs = [ax_lc, ax_res]
-        bt, bf = time_bin(self.time, self.detrended,1./(24*60))
+        bt, bf = time_bin(self.time, self.detrended,dt/(24*60))
         axs[0].errorbar(self.time, self.detrended, yerr=np.std(self.residuals)/np.median(self.data), ls='none', marker='.', color='black', zorder=1, alpha=0.5)
         axs[0].plot(bt,bf,'c.',alpha=0.5,zorder=2)
         axs[0].plot(self.time, self.transit, 'r-', zorder=3)
@@ -229,7 +229,7 @@ class lc_fitter(object):
         axs[0].grid(True,ls='--')
         
         axs[1].plot(self.time, self.residuals/np.median(self.data)*1e6, 'k.', alpha=0.15, label=r'$\sigma$ = {:.0f} ppm'.format( np.std(self.residuals/np.median(self.data)*1e6)))
-        bt, br = time_bin(self.time, self.residuals/np.median(self.data)*1e6,1./(24*60))
+        bt, br = time_bin(self.time, self.residuals/np.median(self.data)*1e6,dt/(24*60))
         axs[1].plot(bt,br,'c.',alpha=0.5,zorder=2,label=r'$\sigma$ = {:.0f} ppm'.format( np.std(br)))
 
         axs[1].legend(loc='best')

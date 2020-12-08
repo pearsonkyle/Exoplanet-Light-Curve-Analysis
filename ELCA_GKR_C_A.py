@@ -88,13 +88,14 @@ def gaussian_weights(X, w=None, neighbors=50, feature_scale=10):
 
 class lc_fitter(object):
 
-    def __init__(self, time, data, dataerr, prior, bounds, syspars, neighbors=100):
+    def __init__(self, time, data, dataerr, prior, bounds, syspars, eclipse=False, neighbors=100):
         self.time = time
         self.data = data
         self.dataerr = dataerr
         self.prior = prior
         self.bounds = bounds
         self.syspars = syspars
+        self.eclipse = eclipse
         self.gw, self.nearest = gaussian_weights(syspars, neighbors=neighbors)
         self.fit_nested()
 
@@ -105,8 +106,8 @@ class lc_fitter(object):
 
         # alloc arrays for C
         time = np.require(self.time,dtype=ctypes.c_double,requirements='C')
-        lightcurve = np.zeros(len(self.time),dtype=ctypes.c_double)
-        lightcurve = np.require(lightcurve,dtype=ctypes.c_double,requirements='C')
+        self.lightcurve = np.zeros(len(self.time),dtype=ctypes.c_double)
+        self.lightcurve = np.require(self.lightcurve,dtype=ctypes.c_double,requirements='C')
         stime = self.time-np.min(self.time)
 
         def loglike(pars):
@@ -118,25 +119,29 @@ class lc_fitter(object):
             # call C function
             keys = ['rprs','ars','per','inc','u1','u2','ecc','omega','tmid']
             vals = [self.prior[k] for k in keys]
-            occultquadC(time, *vals, len(time), lightcurve)
-
+            occultquadC(time, *vals, len(time), self.lightcurve)
+            self.lightcurve += self.eclipse*(1-np.min(self.lightcurve))
             airmass = self.prior['a0'] + self.prior['a1']*stime + self.prior['a2']*stime**2
-            detrended = self.data/(lightcurve*airmass)
+            detrended = self.data/(self.lightcurve*airmass)
             wf = weightedflux(detrended, self.gw, self.nearest)
-            model = lightcurve*wf*airmass
+            model = self.lightcurve*wf*airmass
             return -0.5 * np.sum(((self.data-model)**2/self.dataerr**2))
         
         def prior_transform(upars):
             # transform unit cube to prior volume
             return (boundarray[:,0] + bounddiff*upars)
 
-        dsampler = dynesty.DynamicNestedSampler(
-            loglike, prior_transform,
-            ndim=len(freekeys), bound='multi', sample='unif', 
-            maxiter_init=5000, dlogz_init=1, dlogz=0.05,
-            maxiter_batch=100, maxbatch=10, nlive_batch=100
-        )
-        dsampler.run_nested()
+
+        dsampler = dynesty.NestedSampler(loglike, prior_transform, len(freekeys), dlogz=0.05, sample='unif', bound='multi', nlive=1000)
+
+        #dsampler = dynesty.DynamicNestedSampler(
+        #    loglike, prior_transform,
+        #    ndim=len(freekeys), bound='multi', sample='unif', 
+        #    maxiter_init=5000, dlogz_init=1, dlogz=0.05, 
+        #    maxiter_batch=1000, maxbatch=10, nlive_batch=100
+        #)
+
+        dsampler.run_nested(maxiter=2e6,maxcall=2e6, dlogz=0.05)
         self.results = dsampler.results
 
         # alloc data for best fit + error
@@ -184,6 +189,7 @@ class lc_fitter(object):
         res = []
         for i in range(len(tests)):
             lightcurve = transit(self.time, tests[i])
+            lightcurve += self.eclipse*(1-np.min(lightcurve))
             airmass = tests[i]['a0'] + tests[i]['a1']*stime + tests[i]['a2']*stime**2
 
             detrended = self.data / (lightcurve*airmass)
@@ -208,39 +214,73 @@ class lc_fitter(object):
 
         # best fit model
         self.transit = transit(self.time, self.parameters)
+        self.transit += self.eclipse*(1-np.min(self.transit))
         self.airmass = tests[mi]['a0'] + tests[mi]['a1']*stime + tests[mi]['a2']*stime**2
-
         detrended = self.data / (self.transit*self.airmass)
         self.wf = weightedflux(detrended, self.gw, self.nearest)
         self.model = self.transit*self.wf*self.airmass
         self.residuals = self.data - self.model
         self.detrended = self.data/(self.wf*self.airmass)
+        self.phase = (self.time-self.parameters['tmid'])/self.parameters['per']
 
-    def plot_bestfit(self):
+    def plot_bestfit(self, bin_dt=10./(60*24), zoom=False, phase=True):
         f = plt.figure(figsize=(12,7))
         # f.subplots_adjust(top=0.94,bottom=0.08,left=0.07,right=0.96)
         ax_lc = plt.subplot2grid((4,5), (0,0), colspan=5,rowspan=3)
         ax_res = plt.subplot2grid((4,5), (3,0), colspan=5, rowspan=1)
         axs = [ax_lc, ax_res]
-        bt, bf = time_bin(self.time, self.detrended)
-        axs[0].errorbar(self.time, self.detrended, yerr=np.std(self.residuals)/np.median(self.data), ls='none', marker='.', color='black', zorder=1, alpha=0.5)
-        axs[0].plot(bt,bf,'co',alpha=0.5,zorder=2)
-        axs[0].plot(self.time, self.transit, 'r-', zorder=3)
-        axs[0].set_xlabel("Time [day]")
+
+        #print("in elca_phasecurve, prototype phase calculation")
+        #import pdb; pdb.set_trace()
+
+        bt, bf = time_bin(self.time, self.detrended, bin_dt)
+        bp = (bt-self.parameters['tmid'])/self.parameters['per']
+
+        if phase:
+            axs[0].plot(bp,bf,'co',alpha=0.5,zorder=2)
+            axs[0].plot(self.phase, self.transit, 'r-', zorder=3)
+            axs[0].set_xlim([min(self.phase), max(self.phase)])
+            axs[0].set_xlabel("Phase ")
+        else:
+            axs[0].plot(bt,bf,'co',alpha=0.5,zorder=2)
+            axs[0].plot(self.time, self.transit, 'r-', zorder=3)
+            axs[0].set_xlim([min(self.time), max(self.time)])
+            axs[0].set_xlabel("Time [day]")
+       
+            
         axs[0].set_ylabel("Relative Flux")
         axs[0].grid(True,ls='--')
 
-        axs[1].plot(self.time, self.residuals/np.median(self.data)*1e6, 'k.', 
-            label=r"$\sigma$={:.0f} ppm".format(np.std(self.residuals/np.median(self.data)*1e6)), alpha=0.5)
-        bt, br = time_bin(self.time, self.residuals/np.median(self.data)*1e6)
-        axs[1].plot(bt,br,'c.',alpha=0.5,zorder=2,label=r"$\sigma$={:.0f} ppm".format(np.std(br)))
-        axs[1].set_xlabel("Time [day]")
+        if zoom:
+            axs[0].set_ylim([1-1.25*self.parameters['rprs']**2, 1+0.5*self.parameters['rprs']**2])
+        else:
+            if phase:
+                axs[0].errorbar(self.phase, self.detrended, yerr=np.std(self.residuals)/np.median(self.data), ls='none', marker='.', color='black', zorder=1, alpha=0.1)
+            else:
+                axs[0].errorbar(self.time, self.detrended, yerr=np.std(self.residuals)/np.median(self.data), ls='none', marker='.', color='black', zorder=1, alpha=0.1)
+
+        bt, br = time_bin(self.time, self.residuals/np.median(self.data)*1e6, bin_dt)
+        bp = (bt-self.parameters['tmid'])/self.parameters['per']
+
+        if phase:
+            axs[1].plot(self.phase, self.residuals/np.median(self.data)*1e6, 'k.', alpha=0.15, label=r'$\sigma$ = {:.0f} ppm'.format( np.std(self.residuals/np.median(self.data)*1e6)))
+            axs[1].plot(bp,br,'c.',alpha=0.5,zorder=2,label=r'$\sigma$ = {:.0f} ppm'.format( np.std(br)))
+            axs[1].set_xlim([min(self.phase), max(self.phase)])
+            axs[1].set_xlabel("Phase")
+
+        else:
+            axs[1].plot(self.time, self.residuals/np.median(self.data)*1e6, 'k.', alpha=0.15, label=r'$\sigma$ = {:.0f} ppm'.format( np.std(self.residuals/np.median(self.data)*1e6)))
+            axs[1].plot(bt,br,'c.',alpha=0.5,zorder=2,label=r'$\sigma$ = {:.0f} ppm'.format( np.std(br)))
+            axs[1].set_xlim([min(self.time), max(self.time)])
+            axs[1].set_xlabel("Time [day]")
+        
+        
+        axs[1].legend(loc='best')
         axs[1].set_ylabel("Residuals [ppm]")
         axs[1].grid(True,ls='--')
-        axs[1].legend(loc='best')
         plt.tight_layout()
-
         return f,axs
+
 
 def time_bin(time, flux, dt=5./(60*24)):
     bins = int(np.floor((max(time) - min(time))/dt))

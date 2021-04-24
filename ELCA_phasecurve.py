@@ -70,7 +70,6 @@ eclipseC = lib_trans.eclipse
 eclipseC.argtypes = input_type2
 eclipseC.restype = None
 
-
 # cast arrays into C compatible format with pythonic magic
 def format_args(f):    
     @wraps(f)
@@ -272,25 +271,26 @@ class lc_fitter(object):
             bounddiff = np.diff(boundarray,1).reshape(-1)
             vals = (boundarray[:,0] + bounddiff*upars)
 
-            # set limits of phase amplitude to be less than eclipse depth
+            # set limits of phase amplitude to be less than eclipse depth or user bound
             edepth = vals[freekeys.index('rprs')]**2 * vals[freekeys.index('fpfs')]
             for k in ['c1','c2','c3','c4']:
-                ki = freekeys.index(k)
-                vals[ki] = upars[ki] * edepth - 0.5*edepth
+                if k in freekeys:
+                    if k == 'c1':
+                        ki = freekeys.index(k)
+                        vals[ki] = boundarray[ki,0] + upars[ki]*(edepth-boundarray[ki,0])
 
             return vals
 
         dsampler = dynesty.NestedSampler(loglike, prior_transform, len(freekeys), sample='unif', bound='multi', nlive=1000)
-        
+
         # DynamicNestedSampler(
         #     loglike, prior_transform,
         #     ndim=len(freekeys), bound='multi',
         #     maxiter_init=5000, dlogz_init=1, dlogz=0.05,
         #     maxiter_batch=1000, maxbatch=10, nlive_batch=100
         # )
-        
-        
-        dsampler.run_nested()
+
+        dsampler.run_nested(maxiter=2e6, print_progress=True, maxcall=2e6)
         self.results = dsampler.results
         del(self.results['bound'])
 
@@ -416,8 +416,7 @@ class lc_fitter(object):
             axs[1].plot(bt,br,'c.',alpha=0.5,zorder=2,label=r'$\sigma$ = {:.0f} ppm'.format( np.std(br)))
             axs[1].set_xlim([min(self.time), max(self.time)])
             axs[1].set_xlabel("Time [day]")
-        
-        
+
         axs[1].legend(loc='best')
         axs[1].set_ylabel("Residuals [ppm]")
         axs[1].grid(True,ls='--')

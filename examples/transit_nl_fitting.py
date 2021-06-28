@@ -35,7 +35,7 @@ if __name__ == "__main__":
     mybounds = {
         'rprs':[0,0.1],
         'tmid':[prior['tmid']-0.01,prior['tmid']+0.01],
-        'ars':[13,15],
+        #'ars':[13,15],
 
         #'a1':automatically solved for since it's correlated to a2
         'a2':[0,1]

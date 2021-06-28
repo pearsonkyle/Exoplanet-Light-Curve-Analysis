@@ -22,6 +22,10 @@
    ({ __typeof__ (a) _a = (a); \
        __typeof__ (b) _b = (b); \
      _a > _b ? _a : _b; })
+#define min(a,b) \
+   ({ __typeof__ (a) _a = (a); \
+       __typeof__ (b) _b = (b); \
+     _a < _b ? _a : _b; })
 
 void orbitalanomaly(double *t, double p, double ar, double P, double i, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *anomaly);
 void orbitalradius(double *t, double p, double ar, double P, double i, double gamma1, double gamma2, double e, double longPericenter, double tmid, double n, double *radius);
@@ -303,7 +307,9 @@ void eclipse(double *t, double *C, double fpfs, double rprs, double ars, double 
 	//double edepth = fpfs*rprs*rprs;
 
 	// offset so that mid-eclipse is 1
-	C[0] = -1*((C[1] + C[3])-1*fpfs*rprs*rprs);
+	//C[0] = -1*((C[1] + C[3])-1*fpfs*rprs*rprs);
+	C[0] = -1*((C[1]*cos(2*pi*(tme-tme)/P) + C[2]*sin(2*pi*(tme-tme)/P) + C[3]*cos(4*pi*(tme-tme)/P) + C[4]*sin(4*pi*(tme-tme)/P))-1*fpfs*rprs*rprs);
+
 
 	// phase curve
 	for (int i=0; i<(int)n; i++)
@@ -338,7 +344,9 @@ void brightness(double *t, double *C, double fpfs, double rprs, double ars, doub
 	//double edepth = fpfs*rprs*rprs;
 
 	// offset so that mid-eclipse is 1
-	C[0] = -1*((C[1] + C[3])-1*fpfs*rprs*rprs);
+	//C[0] = -1*((C[1] + C[3])-1*fpfs*rprs*rprs);
+	C[0] = -1*((C[1]*cos(2*pi*(tme-tme)/P) + C[2]*sin(2*pi*(tme-tme)/P) + C[3]*cos(4*pi*(tme-tme)/P) + C[4]*sin(4*pi*(tme-tme)/P))-1*fpfs*rprs*rprs);
+
 
 	// phase curve
 	for (int i=0; i<(int)n; i++)
@@ -399,14 +407,14 @@ void phasecurve(double *t, double *C, double fpfs, double rprs, double ars, doub
 	//double edepth = fpfs*rprs*rprs;
 
 	// offset so that mid-eclipse is 1
-	//C[0] = -1*((C[1]*cos(2*pi*(tme-tme)/P) + C[2]*sin(2*pi*(tme-tme)/P) + C[3]*cos(4*pi*(tme-tme)/P) + C[4]*sin(4*pi*(tme-tme)/P))-1*fpfs*rprs*rprs);
-	C[0] = -1*((C[1] + C[3])-1*fpfs*rprs*rprs);
+	C[0] = -1*((C[1]*cos(2*pi*(tme-tme)/P) + C[2]*sin(2*pi*(tme-tme)/P) + C[3]*cos(4*pi*(tme-tme)/P) + C[4]*sin(4*pi*(tme-tme)/P))-1*fpfs*rprs*rprs);
+	//C[0] = -1*((C[1] + C[3])-1*fpfs*rprs*rprs);
 
 	// phase curve
 	for (int i=0; i<(int)n; i++)
 	{
 		F[i] *= (1 + C[0] + C[1]*cos(2*pi*(t[i]-tme)/P) + C[2]*sin(2*pi*(t[i]-tme)/P) + C[3]*cos(4*pi*(t[i]-tme)/P) + C[4]*sin(4*pi*(t[i]-tme)/P));
-		F[i] *= (eclipse[i]-1)*fpfs + 1;
+		//F[i] *= (eclipse[i]-1)*fpfs + 1;
 
 		// adjust ingress to mid-eclipse
 		// (floor( (eclipse[i]-1)*fpfs + 1 + edepth-1e-8)==0) - equivalent just more calculations
@@ -416,7 +424,7 @@ void phasecurve(double *t, double *C, double fpfs, double rprs, double ars, doub
 		}
 
 		// adjust mid-eclipse to egress
-		if (floor(eclipse[i])==0)
+		if ((floor(eclipse[i])==0) )
 		{
 			F[i] = max(F[i],1);
 		}
@@ -496,7 +504,7 @@ void occultquad(double *t, double p, double ar, double P, double i, double gamma
 	// phase + modification for time series longer than 1 period
 	for (ii=0; ii<Npoints; ii++) 
 	{
-        phi[ii] = (t[ii]-tmid)*invP;
+        phi[ii] = fabs((t[ii]-tmid)*invP);
         phi[ii] = fmod(phi[ii],1);
         if (phi[ii] > 0.5) phi[ii]-=1; 
 	}
@@ -590,6 +598,10 @@ void occultquad(double *t, double p, double ar, double P, double i, double gamma
 		if (z>=(1+p) || p==0 || fabs(phi[j])>(p+1.0)*invar*0.5*invPi) { // Case 1
 			F[j] = 1; // F[j] != 1 when planet is not in sight
 		}
+		// if ((phi[j]  < -0.25) | (phi[j]  > 0.25))
+		// {
+		// 	F[j] = 1;
+		// }
 	}
     free(Z);
     free(phi);
@@ -613,7 +625,7 @@ void occultquad_tmid(double *t, double p, double ar, double P, double i, double 
 	// phase + modification for time series longer than 1 period
 	for (ii=0; ii<Npoints; ii++) 
 	{
-        phi[ii] = (t[ii]-tmid[ii])*invP;
+        phi[ii] = fabs((t[ii]-tmid[ii])*invP);
         phi[ii] = fmod(phi[ii],1);
         if (phi[ii] > 0.5) phi[ii]-=1; 
 	}

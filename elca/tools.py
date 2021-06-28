@@ -5,6 +5,7 @@ import ctypes
 import logging
 import requests
 import numpy as np
+from numba import jit
 from io import StringIO
 from pandas import read_csv
 from functools import wraps
@@ -13,7 +14,7 @@ from matplotlib.ticker import MaxNLocator, NullLocator
 from matplotlib.colors import LinearSegmentedColormap, colorConverter
 from matplotlib.ticker import ScalarFormatter
 from scipy.interpolate import griddata
-from scipy.signal import savgol_filter
+from scipy.signal import savgol_filter, medfilt
 from scipy.optimize import least_squares
 from scipy.ndimage import gaussian_filter
 from scipy import spatial
@@ -279,12 +280,13 @@ def time2z(time, ipct, tknot, sma, orbperiod, ecc, tperi=None, epsilon=1e-5):
     z[sft < 0] *= -1e0
     return z, sft
 
+@jit(nopython=True)
 def solveme(M, e, eps):
     '''
     G. ROUDIER: Newton Raphson solver for true anomaly
     M is a numpy array
     '''
-    E = np.copy(M)
+    E = M.copy()
     for i in np.arange(M.shape[0]):
         while abs(E[i] - e*np.sin(E[i]) - M[i]) > eps:
             num = E[i] - e*np.sin(E[i]) - M[i]
@@ -373,13 +375,14 @@ def nea_scrape(target=None):
 # Fitting algorithm for detrended data
 class lc_fitter():
 
-    def __init__(self, time, data, dataerr, prior, bounds, verbose=False):
+    def __init__(self, time, data, dataerr, prior, bounds, verbose=False, max_ncalls=2e5):
         self.time = time
         self.data = data
         self.dataerr = dataerr
-        self.prior = prior
+        self.prior = copy.deepcopy(prior)
         self.bounds = bounds
         self.verbose = verbose
+        self.max_ncalls = max_ncalls
         self.fit_nested()
 
     def fit_nested(self):
@@ -409,9 +412,9 @@ class lc_fitter():
             return (boundarray[:,0] + bounddiff*upars)
         
         if self.verbose:
-            self.results = ultranest.ReactiveNestedSampler(freekeys, loglike, prior_transform).run(max_ncalls=5e5)
+            self.results = ultranest.ReactiveNestedSampler(freekeys, loglike, prior_transform).run(max_ncalls=self.max_ncalls)
         else:
-            self.results = ultranest.ReactiveNestedSampler(freekeys, loglike, prior_transform).run(max_ncalls=5e5, show_status=self.verbose, viz_callback=self.verbose)
+            self.results = ultranest.ReactiveNestedSampler(freekeys, loglike, prior_transform).run(max_ncalls=self.max_ncalls, show_status=self.verbose, viz_callback=self.verbose)
 
         self.errors = {}
         self.quantiles = {}
@@ -437,9 +440,10 @@ class lc_fitter():
         labels= []
         flabels = {
             'rprs':r'R$_{p}$/R$_{s}$',
+            'per':r'Period [day]',
             'tmid':r'T$_{mid}$',
             'ars':r'a/R$_{s}$',
-            'inc':r'I',
+            'inc':r'Inc. [deg]',
             'u1':r'u$_1$',
             'fpfs':r'F$_{p}$/F$_{s}$', 
             'omega':r'$\omega$',
@@ -509,7 +513,7 @@ class lc_fitter():
         self.bic = len(self.bounds) * np.log(len(self.time)) - 2*np.log(self.chi2)
 
         # compare fit chi2 to smoothed data chi2
-        dt = np.diff(np.sort(self.time)).mean()
+        dt = np.percentile(np.diff(np.sort(self.time)),50)
         si = np.argsort(self.time)
         try:
             self.sdata = savgol_filter(self.data[si], 1+2*int(0.5/24/dt), 2)
@@ -546,7 +550,7 @@ class lc_fitter():
         rprs2err = 2*self.parameters['rprs']*self.errors['rprs']
         lclabel= r"$R^{2}_{p}/R^{2}_{s}$ = %6f $\pm$ %6f, $T_{mid}$ = %5f $\pm$ %5f" %(rprs2, rprs2err,
             self.parameters['tmid'], 
-            self.errors['tmid'])
+            self.errors.get('tmid',0))
 
         if zoom:
             axs[0].set_ylim([1-1.25*self.parameters['rprs']**2, 1+0.5*self.parameters['rprs']**2])
@@ -560,26 +564,26 @@ class lc_fitter():
             si = np.argsort(self.phase)
             bt2, br2, _ = time_bin(self.phase[si]*self.parameters['per'], self.residuals[si]/np.median(self.data)*1e6, bin_dt)
             axs[1].plot(self.phase, self.residuals/np.median(self.data)*1e6, 'k.', alpha=0.2, label=r'$\sigma$ = {:.0f} ppm'.format( np.std(self.residuals/np.median(self.data)*1e6)))
-            axs[1].plot(bt2/self.parameters['per'],br2,'bo',alpha=0.5,zorder=2,label=r'$\sigma$ = {:.0f} ppm'.format( np.std(br2)))
+            axs[1].plot(bt2/self.parameters['per'],br2,'cs',alpha=0.5,zorder=2,label=r'$\sigma$ = {:.0f} ppm'.format( np.std(br2)))
             axs[1].set_xlim([min(self.phase), max(self.phase)])
             axs[1].set_xlabel("Phase", fontsize=14)
 
             si = np.argsort(self.phase)
             bt2, bf2, bs = time_bin(self.phase[si]*self.parameters['per'], self.detrended[si], bin_dt)
-            axs[0].errorbar(bt2/self.parameters['per'],bf2,yerr=bs,alpha=0.5,zorder=2,color='blue',ls='none',marker='o')
+            axs[0].errorbar(bt2/self.parameters['per'],bf2,yerr=bs,alpha=0.5,zorder=2,color='cyan',ls='none',marker='s')
             axs[0].plot(self.phase[si], self.transit[si], 'r-', zorder=3, label=lclabel)
             axs[0].set_xlim([min(self.phase), max(self.phase)])
             axs[0].set_xlabel("Phase ", fontsize=14)
         else:
             bt, br, _ = time_bin(self.time, self.residuals/np.median(self.data)*1e6, bin_dt)
             axs[1].plot(self.time, self.residuals/np.median(self.data)*1e6, 'k.', alpha=0.2, label=r'$\sigma$ = {:.0f} ppm'.format( np.std(self.residuals/np.median(self.data)*1e6)))
-            axs[1].plot(bt,br,'bo',alpha=0.5,zorder=2,label=r'$\sigma$ = {:.0f} ppm'.format( np.std(br)))
+            axs[1].plot(bt,br,'cs',alpha=0.5,zorder=2,label=r'$\sigma$ = {:.0f} ppm'.format( np.std(br)))
             axs[1].set_xlim([min(self.time), max(self.time)])
             axs[1].set_xlabel("Time [day]", fontsize=14)
 
             bt, bf, bs = time_bin(self.time, self.detrended, bin_dt)
             si = np.argsort(self.time)
-            axs[0].errorbar(bt,bf,yerr=bs,alpha=0.5,zorder=2,color='blue',ls='none',marker='o')
+            axs[0].errorbar(bt,bf,yerr=bs,alpha=0.5,zorder=2,color='cyan',ls='none',marker='s')
             axs[0].plot(self.time[si], self.transit[si], 'r-', zorder=3, label=lclabel)
             axs[0].set_xlim([min(self.time), max(self.time)])
             axs[0].set_xlabel("Time [day]", fontsize=14)
@@ -601,7 +605,7 @@ class lc_fitter_detrend(lc_fitter):
         self.data = data
         self.dataerr = dataerr
         self.airmass = airmass
-        self.prior = prior
+        self.prior = copy.deepcopy(prior)
         self.bounds = bounds
         self.verbose = verbose
 
@@ -670,9 +674,9 @@ class lc_fitter_detrend(lc_fitter):
             return (boundarray[:,0] + bounddiff*upars)
 
         if self.verbose:
-            self.results = ultranest.ReactiveNestedSampler(freekeys, loglike, prior_transform).run(max_ncalls=5e5)
+            self.results = ultranest.ReactiveNestedSampler(freekeys, loglike, prior_transform).run(max_ncalls=1.5e5)
         else:
-            self.results = ultranest.ReactiveNestedSampler(freekeys, loglike, prior_transform).run(max_ncalls=5e5, show_status=self.verbose, viz_callback=self.verbose)
+            self.results = ultranest.ReactiveNestedSampler(freekeys, loglike, prior_transform).run(max_ncalls=1.5e5, show_status=self.verbose, viz_callback=self.verbose)
 
         self.errors = {}
         self.quantiles = {}
@@ -731,12 +735,13 @@ class lc_fitter_detrend(lc_fitter):
 #########################################################
 # Multiple light curve fitter
 class glc_fitter(lc_fitter):
-    def __init__(self, input_data, global_bounds, local_bounds, mode='ns', individual_fit=False):
+    def __init__(self, input_data, global_bounds, local_bounds, mode='ns', individual_fit=False, verbose=False):
         # keys for input_data: time, flux, ferr, airmass, priors all numpy arrays
-        self.data = input_data
+        self.data = copy.deepcopy(input_data)
         self.global_bounds = global_bounds
         self.local_bounds = local_bounds
         self.individual_fit = individual_fit
+        self.verbose = verbose
         self.fit_nested()
 
     def fit_nested(self):
@@ -820,7 +825,11 @@ class glc_fitter(lc_fitter):
             for k in lfreekeys:
                 freekeys.append(f"local_{n}_{k}")
 
-        self.results = ultranest.ReactiveNestedSampler(freekeys, loglike, prior_transform).run()
+        if self.verbose:
+            self.results = ultranest.ReactiveNestedSampler(freekeys, loglike, prior_transform).run(max_ncalls=4e5)
+        else:
+            self.results = ultranest.ReactiveNestedSampler(freekeys, loglike, prior_transform).run(max_ncalls=4e5, show_status=self.verbose, viz_callback=self.verbose)
+
         self.errors = {}
         self.quantiles = {}
         self.parameters = {}
@@ -849,7 +858,7 @@ class glc_fitter(lc_fitter):
         # TODO mosaic
         nobs = len(self.data)
         nrows = nobs//4+1
-        fig,ax = pl.subplots(nrows, 4, figsize=(12,4*nrows))
+        fig,ax = pl.subplots(nrows, 4, figsize=(5+5*nrows,4*nrows))
 
         # turn off all axes
         for i in range(nrows*4):
@@ -870,14 +879,14 @@ class glc_fitter(lc_fitter):
 
             if ax.ndim == 1:
                 ax[i].axis('on')
-                ax[i].errorbar(self.data[i]['time'], self.data[i]['flux'], yerr=self.data[i]['ferr'], ls='none', marker='o', color='black', alpha=0.5)
-                ax[i].plot(self.data[i]['time'], model*airmass*detrend.mean(), 'r-')
+                ax[i].errorbar(self.data[i]['time'], self.data[i]['flux']/airmass/detrend.mean(), yerr=self.data[i]['ferr']/airmass/detrend.mean(), ls='none', marker='o', color='black', alpha=0.5)
+                ax[i].plot(self.data[i]['time'], model, 'r-')
                 ax[i].set_xlabel("Time")
 
             else:
                 ax[ri,ci].axis('on')
-                ax[ri,ci].errorbar(self.data[i]['time'], self.data[i]['flux'], yerr=self.data[i]['ferr'], ls='none', marker='o', color='black', alpha=0.5)
-                ax[ri,ci].plot(self.data[i]['time'], model*airmass*detrend.mean(), 'r-')
+                ax[ri,ci].errorbar(self.data[i]['time'], self.data[i]['flux']/airmass/detrend.mean(), yerr=self.data[i]['ferr']/airmass/detrend.mean(), ls='none', marker='o', color='black', alpha=0.5)
+                ax[ri,ci].plot(self.data[i]['time'], model, 'r-')
                 ax[ri,ci].set_xlabel("Time")
         pl.tight_layout()
         return fig            
@@ -913,7 +922,7 @@ class pc_fitter():
         self.time = time
         self.data = data
         self.dataerr = dataerr
-        self.prior = prior
+        self.prior = copy.deepcopy(prior)
         self.bounds = bounds
         self.syspars = syspars
         self.neighbors = neighbors
@@ -1080,12 +1089,12 @@ class pc_fitter():
         bp = (bt-self.parameters['tmid'])/self.parameters['per']
 
         if phase:
-            axs[0].plot(bp,bf,'co',alpha=0.5,zorder=2)
+            axs[0].plot(bp,bf,'cs',alpha=0.5,zorder=2)
             axs[0].plot(self.phase, self.transit, 'r-', zorder=3)
             axs[0].set_xlim([min(self.phase), max(self.phase)])
             axs[0].set_xlabel("Phase ")
         else:
-            axs[0].plot(bt,bf,'co',alpha=0.5,zorder=2)
+            axs[0].plot(bt,bf,'cs',alpha=0.5,zorder=2)
             axs[0].plot(self.time, self.transit, 'r-', zorder=3)
             axs[0].set_xlim([min(self.time), max(self.time)])
             axs[0].set_xlabel("Time [day]")
@@ -1584,17 +1593,17 @@ def hist2d(x, y, bins=20, range=None, levels=[2],
         maskx = (x > range[0][0]) & (x < range[0][1])
         masky = (y > range[1][0]) & (y < range[1][1])
         mask = maskx & masky & (data_kwargs['c'] < data_kwargs['vmax']*1.2)
-
-        # approx posterior + smooth
-        xg, yg = np.meshgrid( np.linspace(x[mask].min(),x[mask].max(),256), np.linspace(y[mask].min(),y[mask].max(),256) )
-        cg = griddata(np.vstack([x[mask],y[mask]]).T, data_kwargs['c'][mask], (xg,yg), method='nearest', rescale=True)
-        scg = gaussian_filter(cg,sigma=15)
         
-        # plot
-        try:
+        try: # contour
+            # approx posterior + smooth
+            xg, yg = np.meshgrid( np.linspace(x[mask].min(),x[mask].max(),256), np.linspace(y[mask].min(),y[mask].max(),256) )
+            cg = griddata(np.vstack([x[mask],y[mask]]).T, data_kwargs['c'][mask], (xg,yg), method='nearest', rescale=True)
+            scg = gaussian_filter(cg,sigma=15)
+
             ax.contour(xg, yg, scg*np.nanmin(cg)/np.nanmin(scg), np.sort(levels), **contour_kwargs, vmin=data_kwargs['vmin'], vmax=data_kwargs['vmax'])        
-        except:
-            pass
+        except Exception as err:
+            print(err)
+            print("contour plotting failed")
     
     ax.set_xlim(range[0])
     ax.set_ylim(range[1])

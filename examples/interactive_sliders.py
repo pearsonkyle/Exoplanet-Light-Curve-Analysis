@@ -1,9 +1,5 @@
 ''' 
-Use the ``bokeh serve`` command to run the example by executing:
-    bokeh serve interactive_sliders.py
-at your command prompt. Then navigate to the URL
-    http://localhost:5006/sliders
-in your browser.
+ Use: bokeh serve interactive_sliders.py
 '''
 import json
 import numpy as np
@@ -27,7 +23,7 @@ prior = {
     'ars': priors['ars'],
     'per': priors['per'],
     'inc': priors['inc'],
-    'tmid':0.25, 
+    'tmid':0.25-priors['per'], 
 
     # eclipse 
     'fpfs': 0.1,
@@ -38,7 +34,7 @@ prior = {
     'u1': 0, 'u2': 0, 
 
     # phase curve amplitudes
-    'c0':5e-4, 'c1':0, 'c2':0, 'c3':0., 'c4':0
+    'c1':0, 'c2':0.,
 }
 
 time = np.linspace(0,priors['per']*0.95, 10000) # [day]
@@ -65,9 +61,9 @@ per = Slider(title="Period", value=prior['per'], start=prior['per']*0.8, end=pri
 ecc = Slider(title="Eccentricity", value=prior['ecc'], start=0, end=0.15, step=0.01)
 ome = Slider(title="Omega", value=prior['omega'], start=0, end=360, step=0.1)
 amp = Slider(title="Day-Night Amplitude (c1)", value=prior['c1'], start=0, end=0.5*prior['fpfs']*prior['rprs']**2, step=0.0001)
-offset = Slider(title="Offset Parameter (c2)", value=prior['c2'], start=0, end=0.5*prior['fpfs']*prior['rprs']**2, step=0.0001)
-width = Slider(title="Day-Night Width (c3)", value=prior['c3'], start=-0.05*prior['fpfs']*prior['rprs']**2, end=0.05*prior['fpfs']*prior['rprs']**2, step=0.00001)
-offset2 = Slider(title="Offset 2 (c4)", value=prior['c4'], start=-0.05*prior['fpfs']*prior['rprs']**2, end=0.05*prior['fpfs']*prior['rprs']**2, step=0.00001)
+#offset = Slider(title="Offset Parameter (c2)", value=prior['c2'], start=0, end=0.5*prior['fpfs']*prior['rprs']**2, step=0.0001)
+width = Slider(title="Day-Night Width (c2)", value=prior['c2'], start=-0.05*prior['fpfs']*prior['rprs']**2, end=0.05*prior['fpfs']*prior['rprs']**2, step=0.00001)
+#offset2 = Slider(title="Offset 2 (c4)", value=prior['c4'], start=-0.05*prior['fpfs']*prior['rprs']**2, end=0.05*prior['fpfs']*prior['rprs']**2, step=0.00001)
 
 def update_data(attrname, old, new):
     prior['rprs'] = rprs.value
@@ -78,16 +74,14 @@ def update_data(attrname, old, new):
     prior['ecc'] = ecc.value
     prior['omega'] = ome.value
     prior['c1'] = amp.value
-    prior['c2'] = offset.value
-    prior['c3'] = width.value
-    prior['c4'] = offset2.value
+    prior['c2'] = width.value
     source.data = dict(x=time, y=phasecurve(time, prior))
 
-for w in [rprs, fpfs, tmid, per, ome, ecc, amp, offset, width, offset2]:
+for w in [rprs, fpfs, tmid, per, ome, ecc, amp, width]:
     w.on_change('value', update_data)
 
 # Set up layouts and add to document
-inputs = column(rprs, tmid, per, fpfs, ome, ecc, amp, offset, width, offset2)
+inputs = column(rprs, tmid, per, fpfs, ome, ecc, amp, width)
 
 curdoc().add_root(row(inputs, plot, width=800))
 curdoc().title = "Sliders"

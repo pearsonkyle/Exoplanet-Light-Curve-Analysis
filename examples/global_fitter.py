@@ -10,7 +10,7 @@ if __name__ == "__main__":
     t1 = timer.time()
 
     # simulate input data
-    epochs = np.random.choice(np.arange(100), 15, replace=False)
+    epochs = np.random.choice(np.arange(100), 25, replace=False)
     input_data = []
 
     for i, epoch in enumerate(epochs):
@@ -52,6 +52,7 @@ if __name__ == "__main__":
 
     # shared properties between light curves
     global_bounds = {
+        'rprs':[0,0.2],
         'per':[3.5-0.001,3.5+0.001],
         'tmid':[1-0.01,1+0.01],
         'ars':[13,15],
@@ -59,7 +60,6 @@ if __name__ == "__main__":
 
     # individual properties, dict or list of dicts
     local_bounds = {
-        'rprs':[0,0.2],
         #'a1': automagically solved for since it's perfectly correlated to a2
         'a2':[-0.5,0]
     }
@@ -80,8 +80,8 @@ if __name__ == "__main__":
 
     # lc - min
     # 3 - 5
-    # 9 - 24
-    # 15 - 
+    # 9 - 24 
+    # 15 - 45
     # 21 - ?
     # convergence gets tough with lots of light curves
     # better to detrend first

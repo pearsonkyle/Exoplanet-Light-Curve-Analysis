@@ -14,8 +14,7 @@ The data points are color coded to the likelihood value and the contours represe
 - Numpy, Matplotlib, Cython, Ultranest
 
 ## Installation
-1. Clone repo
-2. `python setup.py install`
+1. `pip install git+https://github.com/pearsonkyle/Exoplanet-Light-Curve-Analysis.git`
 
 ## Examples
 

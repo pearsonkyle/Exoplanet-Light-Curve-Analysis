@@ -714,7 +714,7 @@ class lc_fitter_detrend(lc_fitter):
         try:
             self.sdata = savgol_filter(self.data[si], 1+2*int(0.5/24/dt), 2)
         except:
-            self.sdata = savgol_filter(self.data[si], 1+2*int(1.5/24/dt), 2)
+            self.sdata = np.ones(len(self.time))
 
         schi2 = np.sum((self.data[si] - self.sdata)**2/self.dataerr[si]**2)
         self.quality = schi2/self.chi2
@@ -743,6 +743,13 @@ class glc_fitter(lc_fitter):
         self.individual_fit = individual_fit
         self.verbose = verbose
         self.fit_nested()
+
+        # set transit function depending on quad/non-linear limb darkening
+        if 'u3' in input_data[0]['priors'].keys():
+            self.transit_fn = transit_nl
+        else:
+            self.transit_fn = transit
+
 
     def fit_nested(self):
 
@@ -810,7 +817,7 @@ class glc_fitter(lc_fitter):
                     self.data[i]['priors'][key] = pars[j+i*len(lfreekeys)+len(gfreekeys)]
 
                 # compute model
-                model = transit(self.data[i]['time'], self.data[i]['priors'])
+                model = self.transit_fn(self.data[i]['time'], self.data[i]['priors'])
                 model *= np.exp(self.data[i]['priors']['a2']*self.data[i]['airmass'])
                 detrend = self.data[i]['flux']/model
                 model *= np.median(detrend)
@@ -848,7 +855,7 @@ class glc_fitter(lc_fitter):
                 self.data[n]['priors'][k] = self.parameters[pkey]
 
             # solve for a1
-            model = transit(self.data[n]['time'], self.data[n]['priors'])
+            model = transit_fn(self.data[n]['time'], self.data[n]['priors'])
             airmass = np.exp(self.data[n]['airmass']*self.data[n]['priors']['a2'])
             detrend = self.data[n]['flux']/(model*airmass)
             self.data[n]['priors']['a1'] = np.median(detrend)
@@ -890,7 +897,6 @@ class glc_fitter(lc_fitter):
                 ax[ri,ci].set_xlabel("Time")
         pl.tight_layout()
         return fig            
-
 
 
 #########################################################

@@ -1,6 +1,7 @@
-# Exoplanet Light Curve Analyzer
+# This code is no longer being maintained and has been merged into [EXOTIC](https://github.com/rzellem/EXOTIC). 
+The api syntax has remained the same but requires a new import `from elca.tools import ...` -> `from exotic.api.elca import ...`
 
-Pronouned like "elsa"
+## Exoplanet Light Curve Analyzer
 
 A python 3 package for modeling exoplanet light curves. The transit function is based on the analytic expressions of Mandel and Agol 2002. Estimate parameters and uncertainties using nested sampling. 
 

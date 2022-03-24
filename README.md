@@ -1,5 +1,8 @@
 # This code is no longer being maintained and has been merged into [EXOTIC](https://github.com/rzellem/EXOTIC). 
-The api syntax has remained the same but requires a new import `from elca.tools import ...` -> `from exotic.api.elca import ...`
+
+The api syntax has remained the same but requires a new import 
+
+`from elca.tools import ...` -> `from exotic.api.elca import ...`
 
 ## Exoplanet Light Curve Analyzer
 
